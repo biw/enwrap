@@ -1,6 +1,6 @@
 # Enwrap
 
-Enwrap is a very small library (653 bytes) that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience. Unlike other libraries, Enwrap does not require you to learn a new syntax, but instead allows you to use native JS/TS.
+Enwrap is a very small library (1.2KB) that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience. Unlike other libraries, Enwrap does not require you to learn a new syntax, but instead allows you to use native JS/TS.
 
 ## Installation
 
@@ -163,19 +163,19 @@ As your TypeScript codebase grows, you may find yourself wanting to return prede
 
 **The only caveat to this is that you must set any explicit error types manually.**
 
-However, Enwrap is smart enough to know that you are returning an explicit type, so it
-will include `TypedError<NonEmptyString>` automatically in the return type.
+In order to return an explicit type, we will use the `WithEW` helper type.
 
 ```ts
+import { type WithEW, ew } from 'enwrap'
 // a type that represents a user used in our codebase
 type User = {
   id: number
   name: string
 }
 
-// notice the return type, we are setting it to `User | TypedError<'missing user'>`
+// notice the return type, we are setting it to `WithEW<User, 'missing user'>`
 // no need to manually set `TypedError<NonEmptyString>`
-const getUser = ew((err, userId: number): User | TypedError<'missing user'> => {
+const getUser = ew((err, userId: number): WithEW<User, 'missing user'> => {
   const user = database.getUser(userId)
   if (!user) {
     return err('missing user')
@@ -186,11 +186,54 @@ const user = getUser(1)
 //    ^? `WithNoError<User> | TypedError<'missing user'> | TypedError<NonEmptyString>`
 ```
 
+If we want to return extra data with our error, we can do so by passing an object
+as the second argument to `WithEW`:
+
+```ts
+import { type WithEW, ew } from 'enwrap'
+
+const getUser = ew((err, userId: number): WithEW<User, { error: 'missing user', { userId: number } }> => {
+  const user = database.getUser(userId)
+  if (!user) {
+    return err('missing user', { userId })
+  }
+  return user
+})
+
+const user = getUser(1)
+//    ^? `WithNoError<User> | TypedError<'missing user', { userId: number }> | TypedError<NonEmptyString>`
+```
+
+You can also use the `GetReturnTypeErrors` helper type to get error types from a function, to make combining multiple levels of Enwrap easier.
+
+```ts
+// continuing from above
+
+type GetUserErrors = GetReturnTypeErrors<typeof getUser>
+//    ^? `TypedError<'missing user', { userId: number }> | TypedError<NonEmptyString>`
+
+const getUserName = ew(
+  async (err, userId: number): WithEW<string, GetUserErrors | 'empty name'> => {
+    const user = await getUser(userId)
+    if (user.error) {
+      return user // return the full type, not just the error
+    }
+    if (user.name === '') {
+      return err('empty username')
+    }
+    return user.name
+  },
+)
+
+const userName = await getUserName(1)
+//    ^? `WithNoError<string> | TypedError<NonEmptyString> | TypedError<'empty username'> | TypedError<'missing user', { userId: number }>`
+```
+
 ## FAQ
 
 ### Does Enwrap support async functions?
 
-Yes, Enwrap supports async functions. If you wrap an async function, the return type will be a `Promise` of the return type of the wrapped function.
+Yes, Enwrap supports async functions. All returns types are preserved and wrapped in a `Promise`.
 
 ### Why not just use `throw` and `try/catch`?
 
@@ -209,6 +252,8 @@ Enwrap functions can return any value, and will type the value with `WithNoError
 ### What happens if I throw a non-error value?
 
 As you may know, you can throw any value in JavaScript/TypeScript. Enwrap will catch any value thrown from a wrapped function, and return it as a `TypedError<NonEmptyString>` with the value of the thrown error as the error message. If it's a non-string value, it will be converted to a string using `String(error)`. If it's an object, it will be converted to a string using `JSON.stringify(error)`. If it's an empty string, it will be converted to `'e'`.
+
+Using ESLint's [`no-throw-literal`](https://eslint.org/docs/latest/rules/no-throw-literal) rule is recommended to prevent yourself from throwing non-error values.
 
 For example:
 
@@ -234,6 +279,22 @@ const res = getUser(1)
 const sentryRes = TypedErrorToSentry(res)
 //    ^? `{ errorObj: Error, extraData: { userId: number } | undefined, message: string }`
 ```
+
+### How can I get the errors returns from an Enwrap function?
+
+You can use the `GetReturnTypeErrors` helper type to get the errors from an Enwrap function.
+
+```ts
+import { ew, type GetReturnTypeErrors } from 'enwrap'
+
+const getUser = ew((err, userId: number) => {
+  // ...
+})
+type GetUserErrors = GetReturnTypeErrors<typeof getUser>
+//    ^? `TypedError<NonEmptyString> | ...`
+```
+
+###
 
 ### I think I found a bug, what should I do?
 

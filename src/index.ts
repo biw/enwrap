@@ -19,15 +19,9 @@ const parseTryCatchError = (error: unknown): Error => {
  *
  * For example, 'hi' is a valid NonEmptyString, but '' is not.
  *
- * DO NOT USE THIS TYPE DIRECTLY
+ * **DO NOT USE THIS TYPE DIRECTLY - For testing purposes only**
  */
 type NonEmptyString = `${string} ${string}` & { __nonEmptyString: never }
-
-/**
- * This should only be used for testing purposes, please don't use this
- * type directly.
- */
-export type __TEST_ONLY_NON_EMPTY_STRING = NonEmptyString
 
 /**
  * Merges types to allow for better type descriptions when the user
@@ -62,11 +56,10 @@ type RemoveReadonlyTuple<T> = T extends readonly [infer U, ...infer U2]
  * This allows us to add an extra error property to primitive types, without
  * casting all the primitive types as Object types and showing their prototype
  * methods in the IDE type description.
- *
- * Do not use this inside of a Prettify type (or prototype methods will be
- * shown).
  */
-export type WithNoError<T> = T & { error?: never }
+type WithNoError<T = any> = T & { error?: never }
+
+type WithNoErrorC<T> = WithNoError<Omit<T, '__isCustomEWReturnType'>>
 
 /**
  * This parses the return type of actual function correctly, handling
@@ -90,7 +83,9 @@ type GetNonErrorTypes<T> = [T] extends [never | null]
       ? WithNoError<RemoveReadonlyTuple<T>>
       : T extends { error: string }
         ? never
-        : Prettify<DeepWriteable<T> & { error?: never }>
+        : T extends { __isCustomEWReturnType?: never }
+          ? WithNoErrorC<T>
+          : Prettify<DeepWriteable<T> & { error?: never }>
 
 /**
  * This types all returned errors as the actual string, alongside
@@ -213,11 +208,53 @@ export const ew = <
   }
 }
 
+type FilterOutEmptyStrings<
+  T extends string | { error: string; extraData?: Record<string, any> },
+> = T extends string
+  ? T extends ''
+    ? never
+    : T
+  : T extends { error: infer J }
+    ? J extends ''
+      ? never
+      : T
+    : never
+
+type C<T> = T & { __isCustomEWReturnType?: never }
+
+export type WithEW<
+  T,
+  errors extends
+    | string
+    | { error: string; extraData?: Record<string, any> }
+    | TypedError<any> = NonEmptyString,
+  validErrors extends
+    FilterOutEmptyStrings<errors> = FilterOutEmptyStrings<errors>,
+> =
+  | C<T>
+  | (validErrors extends string
+      ? TypedError<validErrors>
+      : validErrors extends { error: string }
+        ? validErrors extends TypedError<infer J, infer K>
+          ? TypedError<J, K>
+          : validErrors extends {
+                error: infer J extends string
+                extraData: infer K extends Record<string, any>
+              }
+            ? TypedError<J, K>
+            : validErrors extends { error: infer J extends string }
+              ? TypedError<J>
+              : never
+        : never)
+
 /**
  * Helper function to get the line number of the error.
  *
  * This is useful for debugging/testing, as it allows us to see the exact line
  * that the error occurred on.
+ *
+ * **This should only be used for testing purposes, please don't use this
+ * function directly.**
  */
 const getParsedStack = (
   e: Error | undefined,
@@ -233,29 +270,21 @@ const getParsedStack = (
   if (!firstLine) return null
   const colonSplit = firstLine.split(':')
   const colon = colonSplit[colonSplit.length - 2]
-  const files = lines.slice(1).map((line) => {
-    const byColon = line.split(':')
-    return {
-      deepestLineNumber: byColon[byColon.length - 2],
-    }
-  })
+  // const files = lines.slice(1).map((line) => {
+  //   const byColon = line.split(':')
+  //   return byColon[byColon.length - 2],
+  // })
 
   const editedStack = lines.join('\n')
   return {
     editedStack,
     lineNumber: colon,
-    lines: files,
+    // files,
   }
 }
 
-/**
- * This should only be used for testing purposes, please don't use this
- * function directly.
- */
-export const __TEST_ONLY_getParsedStack = getParsedStack
-
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export const TypedErrorToSentry = <T extends TypedError<string, {}>>(
+export const typedErrorToSentry = <T extends TypedError<string, {}>>(
   error: T,
 ): {
   errorObj: Error
@@ -268,4 +297,24 @@ export const TypedErrorToSentry = <T extends TypedError<string, {}>>(
     extraData: extraData,
     message: error.error,
   }
+}
+
+/**
+ * A helper type to get the return type errors of a function.
+ *
+ * This can be useful when calling multiple levels of enwrap with explicit
+ * return types.
+ */
+export type GetReturnTypeErrors<
+  T extends (...args: any[]) => any,
+  AwaitedT = Awaited<ReturnType<T>>,
+> = AwaitedT extends TypedError<any, any> ? AwaitedT : never
+
+export type __TEST_ONLY = {
+  NonEmptyString: NonEmptyString
+  WithNoError: WithNoError
+}
+
+export const __TEST_ONLY = {
+  getParsedStack,
 }

@@ -1,13 +1,20 @@
 import { describe, expect, expectTypeOf, test } from 'vitest'
 
 import {
-  __TEST_ONLY_getParsedStack as getParsedStack,
-  type __TEST_ONLY_NON_EMPTY_STRING as NonEmptyString,
+  __TEST_ONLY,
+  type __TEST_ONLY as TEST_ONLY,
   ew,
+  type GetReturnTypeErrors,
   type TypedError,
-  TypedErrorToSentry,
-  WithNoError,
+  typedErrorToSentry,
+  type WithEW,
 } from '../src/index'
+
+type NonEmptyString = TEST_ONLY['NonEmptyString']
+
+type WithNoError<T> = T & { error?: never }
+
+const { getParsedStack } = __TEST_ONLY
 
 const noOp = <T extends any[]>(...args: T) => args
 
@@ -270,7 +277,7 @@ describe('ew', () => {
     })
     const res2 = res()
 
-    expect(getParsedStack(res2?.rawError)?.lineNumber).toBe('269')
+    expect(getParsedStack(res2?.rawError)?.lineNumber).toBe('276')
 
     expectTypeOf(res2).toEqualTypeOf<TypedError<NonEmptyString> | undefined>()
 
@@ -376,7 +383,7 @@ describe('ew', () => {
     >()
 
     if (res2.error) {
-      expect(getParsedStack(res2.rawError)?.lineNumber).toBe('358')
+      expect(getParsedStack(res2.rawError)?.lineNumber).toBe('365')
       expectTypeOf(res2).toEqualTypeOf<
         TypedError<NonEmptyString> | TypedError<'deep-error'>
       >()
@@ -417,7 +424,7 @@ describe('ew', () => {
       expectTypeOf(res2).toEqualTypeOf<
         TypedError<NonEmptyString> | TypedError<'deep-error'>
       >()
-      expect(getParsedStack(res2.rawError)?.lineNumber).toBe('397')
+      expect(getParsedStack(res2.rawError)?.lineNumber).toBe('404')
       expect(res2.error).toBe('deep-error')
       return
     }
@@ -441,7 +448,7 @@ describe('ew', () => {
 
     const res2 = res()
     expectTypeOf(res2).toEqualTypeOf<
-      | ([1, 2, 'hey'] & { error?: never })
+      | WithNoError<[1, 2, 'hey']>
       | TypedError<'math-random-error'>
       | TypedError<NonEmptyString>
     >()
@@ -451,7 +458,7 @@ describe('ew', () => {
       return
     }
 
-    expectTypeOf(res2).toEqualTypeOf<[1, 2, 'hey'] & { error?: never }>()
+    expectTypeOf(res2).toEqualTypeOf<WithNoError<[1, 2, 'hey']>>()
   })
 
   test('return array', () => {
@@ -461,7 +468,7 @@ describe('ew', () => {
 
     const res2 = res()
     expectTypeOf(res2).toEqualTypeOf<
-      (number[] & { error?: never }) | TypedError<NonEmptyString>
+      WithNoError<number[]> | TypedError<NonEmptyString>
     >()
 
     if (res2.error) {
@@ -469,30 +476,30 @@ describe('ew', () => {
       return
     }
 
-    expectTypeOf(res2).toEqualTypeOf<number[] & { error?: never }>()
+    expectTypeOf(res2).toEqualTypeOf<WithNoError<number[]>>()
   })
 
-  test('allow settings explicit return type', () => {
+  test('allow settings explicit return type with error string', () => {
     // it's import to notice that we are setting any explicit error return
     // types, but we do not need to set the generic TypedError<NonEmptyString>
     // type, which is nice
-    type PizzaError = TypedError<"pizza doesn't exist">
     type ReturnType = { pizza: 'very good' | 'bad'; x: number }
-    const res = ew((err): ReturnType | PizzaError => {
-      // this can never happen, but typescript doesn't know that
-      if (Math.random() > 100) {
-        return err("pizza doesn't exist")
-      }
-      return { pizza: 'very good', x: 1 }
-    })
+    const res = ew(
+      (err, num: number): WithEW<ReturnType, "pizza doesn't exist"> => {
+        // this can never happen, but typescript doesn't know that
+        if (Math.random() > 100) {
+          return err("pizza doesn't exist", { x: 1 })
+        }
+        return { pizza: 'very good', x: num }
+      },
+    )
 
-    const res2 = res()
+    const res2 = res(1)
     expectTypeOf(res2).toEqualTypeOf<
-      | {
-          error?: never
+      | WithNoError<{
           pizza: 'very good' | 'bad'
           x: number
-        }
+        }>
       | TypedError<NonEmptyString>
       | TypedError<"pizza doesn't exist">
     >()
@@ -503,6 +510,114 @@ describe('ew', () => {
     }
 
     expect(res2.pizza).toBe('very good')
+  })
+
+  test('allow settings explicit return type with error object - no extra data', () => {
+    // it's import to notice that we are setting any explicit error return
+    // types, but we do not need to set the generic TypedError<NonEmptyString>
+    // type, which is nice
+    type ReturnType = {
+      deep: { x: string }
+      pizza: 'very good' | 'bad'
+      x: number
+    }
+    const res = ew(
+      (
+        err,
+        num: number,
+      ): WithEW<ReturnType, { error: "pizza doesn't exist" }> => {
+        // this can never happen, but typescript doesn't know that
+        if (Math.random() > 100) {
+          return err("pizza doesn't exist")
+        }
+        return { deep: { x: 'hey' }, pizza: 'very good', x: num }
+      },
+    )
+
+    const res2 = res(1)
+    expectTypeOf(res2).toEqualTypeOf<
+      | WithNoError<{
+          deep: { x: string }
+          pizza: 'very good' | 'bad'
+          x: number
+        }>
+      | TypedError<NonEmptyString>
+      | TypedError<"pizza doesn't exist">
+    >()
+
+    if (res2.error) {
+      expect(1).toBe(2)
+      return
+    }
+
+    res2.pizza = 'bad'
+    res2.deep.x = 'bad'
+
+    expect(res2.pizza).toBe('bad')
+    expect(res2.deep.x).toBe('bad')
+  })
+
+  test('allow settings explicit readonly return type with error object - with extra data', () => {
+    // one important but to notice is that we can't control
+    type ReturnType = Readonly<{
+      deep: Readonly<{ x: string }>
+      pizza: 'very good' | 'bad'
+      x: number
+    }>
+
+    const res = ew(
+      (
+        err,
+        num: number,
+      ): WithEW<
+        ReturnType,
+        { error: "pizza doesn't exist"; extraData: { x: number } }
+      > => {
+        // this can never happen, but typescript doesn't know that
+        if (Math.random() > 100) {
+          return err("pizza doesn't exist", { x: num })
+        }
+        return { deep: { x: 'hey' }, pizza: 'very good', x: num }
+      },
+    )
+
+    const res2 = res(1)
+    expectTypeOf(res2).toEqualTypeOf<
+      | WithNoError<
+          Readonly<{
+            deep: Readonly<{ x: string }>
+            pizza: 'very good' | 'bad'
+            x: number
+          }>
+        >
+      | TypedError<NonEmptyString>
+      | TypedError<"pizza doesn't exist", { x: number }>
+    >()
+
+    if (res2.error) {
+      expect(1).toBe(2)
+      return
+    }
+
+    expectTypeOf(res2).toEqualTypeOf<
+      WithNoError<
+        Readonly<{
+          deep: Readonly<{ x: string }>
+          pizza: 'very good' | 'bad'
+          x: number
+        }>
+      >
+    >()
+
+    // @ts-expect-error can't assign to read-only property
+    res2.pizza = 'bad'
+    // @ts-expect-error can't assign to read-only property
+    res2.deep.x = 'bad'
+
+    // we don't control that the value is immutable, only that it's readonly
+    // if someone changes the value, we can't do anything about it
+    expect(res2.pizza).toBe('bad')
+    expect(res2.deep.x).toBe('bad')
   })
 
   test('allow returning extra data with the error', () => {
@@ -601,7 +716,7 @@ describe('ew', () => {
 
     expectTypeOf(res3).toEqualTypeOf<TypedError<NonEmptyString> | undefined>()
 
-    expect(getParsedStack(res3?.rawError)?.lineNumber).toBe('592')
+    expect(getParsedStack(res3?.rawError)?.lineNumber).toBe('707')
 
     // if we don't have a return type, we need to check for nullish
     // vs being able to access the optional error property in order for
@@ -617,14 +732,252 @@ describe('ew', () => {
     // checked for the error property above
     expectTypeOf(res3).toEqualTypeOf<undefined>()
   })
+
+  test('throw string', () => {
+    const res = ew(() => {
+      // eslint-disable-next-line no-throw-literal
+      throw 'error'
+    })
+
+    const res2 = res()
+
+    if (res2?.error) {
+      expect(res2.error).toBe('error')
+      return
+    }
+    expect(1).toBe(2)
+  })
+
+  test('throw object', () => {
+    const res = ew(() => {
+      // eslint-disable-next-line no-throw-literal
+      throw { error: 'error' }
+    })
+
+    const res2 = res()
+
+    if (res2?.error) {
+      expect(res2.error).toBe('{"error":"error"}')
+      return
+    }
+    expect(1).toBe(2)
+  })
+
+  test('throw number', () => {
+    const res = ew(() => {
+      // eslint-disable-next-line no-throw-literal
+      throw 123
+    })
+
+    const res2 = res()
+
+    if (res2?.error) {
+      expect(res2.error).toBe('123')
+      return
+    }
+    expect(1).toBe(2)
+  })
+
+  test('throw boolean', () => {
+    const res = ew(() => {
+      // eslint-disable-next-line no-throw-literal
+      throw true
+    })
+
+    const res2 = res()
+
+    if (res2?.error) {
+      expect(res2.error).toBe('true')
+      return
+    }
+    expect(1).toBe(2)
+  })
+
+  test('throw undefined', () => {
+    const res = ew(() => {
+      // eslint-disable-next-line no-throw-literal
+      throw undefined
+    })
+
+    const res2 = res()
+
+    if (res2?.error) {
+      expect(res2.error).toBe('undefined')
+      return
+    }
+    expect(1).toBe(2)
+  })
+
+  test('throw empty string', () => {
+    const res = ew(() => {
+      // eslint-disable-next-line no-throw-literal
+      throw ''
+    })
+
+    const res2 = res()
+
+    if (res2?.error) {
+      expect(res2.error).toBe('e')
+      return
+    }
+    expect(1).toBe(2)
+  })
 })
 
-describe('TypedErrorToSentry', () => {
+describe('GetReturnTypeErrors', () => {
+  test('basic', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const res = ew(() => {
+      // eslint-disable-next-line no-throw-literal
+      throw 1
+    })
+
+    type x = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<x>().toEqualTypeOf<TypedError<NonEmptyString>>()
+  })
+
+  test('with custom error - no extra data', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const res = ew((err) => {
+      return err('error')
+    })
+
+    type errorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<errorReturnType>().toEqualTypeOf<
+      TypedError<'error'> | TypedError<NonEmptyString>
+    >()
+  })
+
+  test('with custom error - with extra data', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const res = ew((err) => {
+      return err('error', { userID: 123 })
+    })
+
+    type errorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<errorReturnType>().toEqualTypeOf<
+      TypedError<'error', { userID: 123 }> | TypedError<NonEmptyString>
+    >()
+  })
+
+  test('with string return type', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const res = ew(() => {
+      return 'pizza'
+    })
+
+    type errorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<errorReturnType>().toEqualTypeOf<TypedError<NonEmptyString>>()
+  })
+
+  test('with array return type', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const res = ew(() => {
+      return [1, 2, 3]
+    })
+
+    type errorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<errorReturnType>().toEqualTypeOf<TypedError<NonEmptyString>>()
+  })
+
+  test('with object return type', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const res = ew(() => {
+      return { pizza: 'very good' }
+    })
+
+    type errorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<errorReturnType>().toEqualTypeOf<TypedError<NonEmptyString>>()
+  })
+
+  test('with no return type', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const res = ew(() => {
+      const x = 1
+      noOp(x)
+    })
+
+    type errorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<errorReturnType>().toEqualTypeOf<TypedError<NonEmptyString>>()
+  })
+
+  test('with promise return type', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const res = ew(async (err) => {
+      if (Math.random() > 100) {
+        return err('error123', { x: 123 })
+      }
+      if (Math.random() > 100) {
+        return err('error456')
+      }
+      return 'pizza'
+    })
+
+    type errorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<errorReturnType>().toEqualTypeOf<
+      | TypedError<NonEmptyString>
+      | TypedError<'error123', { x: 123 }>
+      | TypedError<'error456'>
+    >()
+  })
+
+  test('use a sub-error', () => {
+    const res = ew((err) => {
+      return err('error', { userID: 123 })
+    })
+
+    type errorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<errorReturnType>().toEqualTypeOf<
+      TypedError<'error', { userID: 123 }> | TypedError<NonEmptyString>
+    >()
+
+    const res2 = ew(
+      (err): WithEW<{ b: 1 }, errorReturnType | TypedError<'error'>> => {
+        const resInner = res()
+        if (resInner.error) {
+          return resInner
+        }
+        if (Math.random() > 100) {
+          return err('error')
+        }
+        return { b: 1 }
+      },
+    )
+
+    const res3 = res2()
+
+    expectTypeOf(res3).toEqualTypeOf<
+      | WithNoError<{ b: 1 }>
+      | errorReturnType
+      | TypedError<'error', { userID: 123 }>
+      | TypedError<'error'>
+    >()
+
+    type errorReturnType2 = GetReturnTypeErrors<typeof res2>
+
+    expectTypeOf<errorReturnType2>().toEqualTypeOf<
+      | errorReturnType
+      | TypedError<'error'>
+      | TypedError<'error', { userID: 123 }>
+    >()
+  })
+})
+
+describe('typedErrorToSentry', () => {
   test('basic', () => {
     const res = ew((err) => {
       return err('error', { userID: 123 })
     })
-    const sentryRes = TypedErrorToSentry(res())
+    const sentryRes = typedErrorToSentry(res())
 
     expectTypeOf(sentryRes).toEqualTypeOf<{
       errorObj: Error

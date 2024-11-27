@@ -1,8 +1,8 @@
 # Enwrap
 
-![bundlephobia minzip](https://badgen.net/bundlephobia/minzip/enwrap)
-![bundlephobia tree shaking](https://badgen.net/bundlephobia/tree-shaking/enwrap)
-![bundlephobia dependency count](https://badgen.net/bundlephobia/dependency-count/enwrap?color=black)
+[![bundlephobia minzip](https://badgen.net/bundlephobia/minzip/enwrap)](https://bundlephobia.com/package/enwrap)
+[![bundlephobia tree shaking](https://badgen.net/bundlephobia/tree-shaking/enwrap)](https://bundlephobia.com/package/enwrap)
+[![bundlephobia dependency count](https://badgen.net/bundlephobia/dependency-count/enwrap?color=black)](https://github.com/ahoylabs/enwrap/blob/main/package.json)
 
 Enwrap is a very small (752 bytes) and dependency free library that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience.
 
@@ -308,4 +308,4 @@ Please open a [GitHub Issue](https://github.com/biw/enwrap/issues).
 
 ## License
 
-Enwrap is licensed under the MIT license.
+[MIT](https://github.com/ahoylabs/enwrap/blob/main/LICENSE)

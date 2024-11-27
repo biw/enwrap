@@ -1,6 +1,12 @@
 # Enwrap
 
-Enwrap is a very small library (1.2KB) that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience. Unlike other libraries, Enwrap does not require you to learn a new syntax, but instead allows you to use native JS/TS.
+![bundlephobia minzip](https://badgen.net/bundlephobia/minzip/enwrap)
+![bundlephobia tree shaking](https://badgen.net/bundlephobia/tree-shaking/enwrap)
+![bundlephobia dependency count](https://badgen.net/bundlephobia/dependency-count/enwrap?color=black)
+
+Enwrap is a very small (752 bytes) and dependency free library that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience.
+
+Unlike other libraries, Enwrap does not require you to learn a new dramatically different syntax, most TypeScript developers will feel right at home after a few minutes.
 
 ## Installation
 
@@ -280,7 +286,7 @@ const sentryRes = TypedErrorToSentry(res)
 //    ^? `{ errorObj: Error, extraData: { userId: number } | undefined, message: string }`
 ```
 
-### How can I get the errors returns from an Enwrap function?
+### How can I get the errors returned from an Enwrap function?
 
 You can use the `GetReturnTypeErrors` helper type to get the errors from an Enwrap function.
 

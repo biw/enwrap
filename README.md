@@ -219,7 +219,10 @@ type GetUserErrors = GetReturnTypeErrors<typeof getUser>
 //    ^? `TypedError<'missing user', { userId: number }> | TypedError<NonEmptyString>`
 
 const getUserName = ew(
-  async (err, userId: number): WithEW<string, GetUserErrors | 'empty name'> => {
+  async (
+    err,
+    userId: number,
+  ): WithEW<string, GetUserErrors | 'empty username'> => {
     const user = await getUser(userId)
     if (user.error) {
       return user // return the full type, not just the error

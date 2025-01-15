@@ -86,6 +86,27 @@ describe('ew', () => {
     expect(res2).toEqual(undefined)
   })
 
+  test('return undefined or error', () => {
+    const res = ew((err) => {
+      if (Math.random() > 100) {
+        return err('error')
+      }
+      return undefined
+    })
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      undefined | TypedError<NonEmptyString> | TypedError<'error'>
+    >()
+
+    if (res2?.error) {
+      expect(1).toBe(2)
+      return
+    }
+
+    expect(res2).toEqual(undefined)
+  })
+
   test('return null', () => {
     const res = ew(() => {
       return null
@@ -93,6 +114,27 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<null | TypedError<NonEmptyString>>()
+
+    if (res2?.error) {
+      expect(1).toBe(2)
+      return
+    }
+
+    expect(res2).toEqual(null)
+  })
+
+  test('return null or error', () => {
+    const res = ew((err) => {
+      if (Math.random() > 100) {
+        return err('error')
+      }
+      return null
+    })
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      null | TypedError<NonEmptyString> | TypedError<'error'>
+    >()
 
     if (res2?.error) {
       expect(1).toBe(2)

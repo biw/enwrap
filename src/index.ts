@@ -71,21 +71,23 @@ type GetNonErrorTypes<T> = [T] extends [never | null]
     : TypedError<NonEmptyString> | undefined
   : T extends void
     ? undefined
-    : T extends
-          | number
-          | string
-          | boolean
-          | bigint
-          | symbol
-          | any[]
-          | readonly any[]
-          | readonly [any, ...any]
-      ? WithNoError<RemoveReadonlyTuple<T>>
-      : T extends { error: string }
-        ? never
-        : T extends { __isCustomEWReturnType?: never }
-          ? WithNoErrorC<T>
-          : Prettify<DeepWriteable<T> & { error?: never }>
+    : T extends null
+      ? null
+      : T extends
+            | number
+            | string
+            | boolean
+            | bigint
+            | symbol
+            | any[]
+            | readonly any[]
+            | readonly [any, ...any]
+        ? WithNoError<RemoveReadonlyTuple<T>>
+        : T extends { error: string }
+          ? never
+          : T extends { __isCustomEWReturnType?: never }
+            ? WithNoErrorC<T>
+            : Prettify<DeepWriteable<T> & { error?: never }>
 
 /**
  * This types all returned errors as the actual string, alongside

@@ -144,6 +144,59 @@ describe('ew', () => {
     expect(res2).toEqual(null)
   })
 
+  test('return void', () => {
+    const res = ew(() => {
+      return
+    })
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<undefined | TypedError<NonEmptyString>>()
+  })
+
+  test('return void or error', () => {
+    const res = ew((err) => {
+      if (Math.random() > 100) {
+        return err('error')
+      }
+      return
+    })
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      undefined | TypedError<NonEmptyString> | TypedError<'error'>
+    >()
+  })
+
+  test('return void using WithEW', () => {
+    const res = ew((err): WithEW<void, 'errorStr'> => {
+      if (Math.random() > 100) {
+        return
+      }
+      if (Math.random() > 100) {
+        return err('errorStr')
+      }
+    })
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      TypedError<NonEmptyString> | TypedError<'errorStr'> | undefined
+    >()
+  })
+
+  test('non-return void using WithEW', () => {
+    const res = ew((err): WithEW<void, 'error123'> => {
+      if (Math.random() > 100) {
+        return err('error123')
+      }
+      noOp(1)
+    })
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      TypedError<'error123'> | TypedError<NonEmptyString> | undefined
+    >()
+  })
+
   test('return object', () => {
     const res = ew(() => {
       return { a: 1 }
@@ -165,6 +218,9 @@ describe('ew', () => {
 
   test('try to return error object', () => {
     const res = ew(() => {
+      if (Math.random() > 100) {
+        return 123
+      }
       return { error: new Error('error') }
     })
     const res2 = res()
@@ -180,6 +236,9 @@ describe('ew', () => {
 
   test('try to return non error string', () => {
     const res = ew(() => {
+      if (Math.random() > 100) {
+        return 123
+      }
       return { error: 123, pizza: 123 }
     })
 
@@ -198,6 +257,9 @@ describe('ew', () => {
 
   test('try to return only an error string', () => {
     const res = ew(() => {
+      if (Math.random() > 100) {
+        return 123
+      }
       return { error: 'err2' }
     })
 
@@ -205,6 +267,19 @@ describe('ew', () => {
     // don't allow access to property without error check
     // @ts-expect-error can't access type on never
     noOp(res2.a)
+
+    expectTypeOf(res2).toEqualTypeOf<never>()
+  })
+
+  test('incorrectly return err function', () => {
+    const res = ew((err) => {
+      if (Math.random() > 100) {
+        return err('123')
+      }
+      return err
+    })
+
+    const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<never>()
   })
@@ -224,6 +299,19 @@ describe('ew', () => {
     noOp(res2.a)
 
     expectTypeOf(res2).toEqualTypeOf<never>()
+  })
+
+  test('return a function', () => {
+    const res = ew(() => {
+      return () => {
+        return null
+      }
+    })
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      TypedError<NonEmptyString, never> | WithNoError<() => null>
+    >()
   })
 
   test('edit object', () => {
@@ -319,7 +407,7 @@ describe('ew', () => {
     })
     const res2 = res()
 
-    expect(getParsedStack(res2?.rawError)?.lineNumber).toBe('318')
+    expect(getParsedStack(res2?.rawError)?.lineNumber).toBe('406')
 
     expectTypeOf(res2).toEqualTypeOf<TypedError<NonEmptyString> | undefined>()
 
@@ -425,7 +513,7 @@ describe('ew', () => {
     >()
 
     if (res2.error) {
-      expect(getParsedStack(res2.rawError)?.lineNumber).toBe('407')
+      expect(getParsedStack(res2.rawError)?.lineNumber).toBe('495')
       expectTypeOf(res2).toEqualTypeOf<
         TypedError<NonEmptyString> | TypedError<'deep-error'>
       >()
@@ -439,6 +527,103 @@ describe('ew', () => {
     noOp(res2.a)
     const isNumber = (_: number) => {}
     isNumber(res2.a)
+  })
+
+  test('multi-function using WithEW', () => {
+    const res = ew(
+      (
+        err,
+      ): WithEW<
+        { a: number },
+        'deep-error-str' | { error: 'deep-error'; extraData: { pizza: 'pie' } }
+      > => {
+        return err('deep-error', { pizza: 'pie' })
+      },
+    )
+
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      | TypedError<'deep-error-str'>
+      | TypedError<'deep-error', { pizza: 'pie' }>
+      | TypedError<NonEmptyString>
+      | WithNoError<{ a: number }>
+    >()
+
+    const res3 = ew(
+      (): WithEW<
+        { b: number },
+        { error: 'deep-error'; extraData: { pizza: 'pie' } } | 'deep-error-str'
+      > => {
+        const resInner = res()
+        if (resInner.error) {
+          return resInner
+        }
+        return { b: 1 }
+      },
+    )
+
+    const res4 = res3()
+
+    expectTypeOf(res4).toEqualTypeOf<
+      | WithNoError<{ b: number }>
+      | TypedError<'deep-error', { pizza: 'pie' }>
+      | TypedError<'deep-error-str'>
+      | TypedError<NonEmptyString>
+    >()
+  })
+
+  test('multi-function using WithEW with attempt to throw away extra data', () => {
+    const res = ew(
+      (
+        err,
+      ): WithEW<
+        { a: number },
+        | 'deep-error-str'
+        | 'deep-error'
+        | { error: 'deep-error'; extraData: { pizza: 'pie' } }
+      > => {
+        return err('deep-error', { pizza: 'pie' })
+      },
+    )
+
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      | TypedError<'deep-error-str'>
+      | TypedError<'deep-error'>
+      | TypedError<'deep-error', { pizza: 'pie' }>
+      | TypedError<NonEmptyString>
+      | WithNoError<{ a: number }>
+    >()
+
+    // this is a test to make sure that we can not throw away extra data
+    // if we are returning an error
+    const res5 = ew(
+      (): WithEW<
+        { b: number },
+        'deep-error21' | 'deep-error' | 'deep-error-str'
+      > => {
+        const resInner = res()
+        if (resInner.error) {
+          // @ts-expect-error throwing away extra data
+          return resInner
+        }
+        return { b: 1 }
+      },
+    )
+
+    const res6 = res5()
+
+    // the type will be valid since we trust WithEW, but typescript will
+    // complain about the extra data being thrown away above in res5
+    expectTypeOf(res6).toEqualTypeOf<
+      | WithNoError<{ b: number }>
+      | TypedError<'deep-error-str'>
+      | TypedError<'deep-error'>
+      | TypedError<'deep-error21'>
+      | TypedError<NonEmptyString>
+    >()
   })
 
   test('multi-function with sub-object', () => {
@@ -466,7 +651,7 @@ describe('ew', () => {
       expectTypeOf(res2).toEqualTypeOf<
         TypedError<NonEmptyString> | TypedError<'deep-error'>
       >()
-      expect(getParsedStack(res2.rawError)?.lineNumber).toBe('446')
+      expect(getParsedStack(res2.rawError)?.lineNumber).toBe('631')
       expect(res2.error).toBe('deep-error')
       return
     }
@@ -527,7 +712,13 @@ describe('ew', () => {
     // type, which is nice
     type ReturnType = { pizza: 'very good' | 'bad'; x: number }
     const res = ew(
-      (err, num: number): WithEW<ReturnType, "pizza doesn't exist"> => {
+      (
+        err,
+        num: number,
+      ): WithEW<
+        ReturnType,
+        { error: "pizza doesn't exist"; extraData: { x: number } }
+      > => {
         // this can never happen, but typescript doesn't know that
         if (Math.random() > 100) {
           return err("pizza doesn't exist", { x: 1 })
@@ -543,7 +734,7 @@ describe('ew', () => {
           x: number
         }>
       | TypedError<NonEmptyString>
-      | TypedError<"pizza doesn't exist">
+      | TypedError<"pizza doesn't exist", { x: number }>
     >()
 
     if (res2.error) {
@@ -758,7 +949,7 @@ describe('ew', () => {
 
     expectTypeOf(res3).toEqualTypeOf<TypedError<NonEmptyString> | undefined>()
 
-    expect(getParsedStack(res3?.rawError)?.lineNumber).toBe('749')
+    expect(getParsedStack(res3?.rawError)?.lineNumber).toBe('940')
 
     // if we don't have a return type, we need to check for nullish
     // vs being able to access the optional error property in order for
@@ -990,6 +1181,13 @@ describe('GetReturnTypeErrors', () => {
         }
         if (Math.random() > 100) {
           return err('error')
+        }
+        if (Math.random() > 100) {
+          return err('error', { userID: 123 })
+        }
+        if (Math.random() > 100) {
+          // @ts-expect-error invalid extra data
+          return err('error', { userID: 456 })
         }
         return { b: 1 }
       },

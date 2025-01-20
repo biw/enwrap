@@ -81,6 +81,7 @@ type GetNonErrorTypes<T> = [T] extends [never]
             | readonly any[]
             | readonly [any, ...any]
             | ((...args: never) => unknown)
+            | Date
         ? WithNoError<RemoveReadonlyTuple<T>>
         : T extends { error: string }
           ? never
@@ -172,6 +173,8 @@ const errorCallback = <
             | any[]
             | readonly any[]
             | readonly [any, ...any]
+            | ((...args: never) => unknown)
+            | Date
         ? ExtraData
         : Prettify<DeepWriteable<ExtraData>>
 > => {

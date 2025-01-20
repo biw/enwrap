@@ -312,6 +312,21 @@ describe('ew', () => {
     >()
   })
 
+  test('return a Date object deep in an object', () => {
+    const res = ew(() => {
+      return { a: { b: new Date() } }
+    })
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      | TypedError<NonEmptyString, never>
+      | {
+          a: { b: Date }
+          error?: never | undefined
+        }
+    >()
+  })
+
   // test('return a Date object in extra data', () => {
   //   const res = ew((err) => {
   //     return err('error', { pizza: new Date() })

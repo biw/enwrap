@@ -40,7 +40,19 @@ type Prettify<T> = {
  * return type non-const with the DeepWriteable type.
  */
 type DeepWriteable<T> = {
-  -readonly [P in keyof T]: Prettify<DeepWriteable<T[P]>>
+  -readonly [P in keyof T]: T[P] extends
+    | number
+    | string
+    | boolean
+    | bigint
+    | symbol
+    | any[]
+    | readonly any[]
+    | readonly [any, ...any]
+    | ((...args: never) => unknown)
+    | Date
+    ? T[P]
+    : Prettify<DeepWriteable<T[P]>>
 }
 
 /**

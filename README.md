@@ -49,7 +49,7 @@ Enwrap supports returning any value from the wrapped function, and will type the
 
 ### Typed Error Handling
 
-One massive advantage of Enwrap, vs `new Error()` is that all explicit errors are typed. This allows you to handle different types of errors in a type safe manner & with editor autocomplete!
+One massive advantage of Enwrap, vs. `throw new Error()` is that all explicit errors are typed. This allows you to handle different types of errors in a type safe manner & with editor autocomplete!
 
 One important thing to note is that since there's no way to type or detect errors that are thrown in a function, Enwrap includes a generic `TypedError<NonEmptyString, true>` return type for all functions, even ones that don't explicitly return an error.
 
@@ -337,8 +337,6 @@ const getUser = ew((err, userId: number) => {
 type GetUserErrors = GetReturnTypeErrors<typeof getUser>
 //    ^? `TypedError<NonEmptyString, true> | ...`
 ```
-
-###
 
 ### I think I found a bug, what should I do?
 

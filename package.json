@@ -1,6 +1,6 @@
 {
   "name": "enwrap",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "Tiny function wrapper that returns typed errors",
   "license": "MIT",
   "author": "Ben Williams",

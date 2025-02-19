@@ -4,7 +4,7 @@
 [![bundlephobia tree shaking](https://badgen.net/bundlephobia/tree-shaking/enwrap)](https://bundlephobia.com/package/enwrap)
 [![bundlephobia dependency count](https://badgen.net/bundlephobia/dependency-count/enwrap?color=black)](https://github.com/ahoylabs/enwrap/blob/main/package.json)
 
-Enwrap is a tiny (752 bytes) and dependency-free library that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience.
+Enwrap is a tiny (534 bytes) and dependency-free library that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience.
 
 Unlike other libraries, Enwrap does not require you to learn a new, dramatically different syntax; most TypeScript developers will feel right at home after a few minutes.
 
@@ -175,27 +175,6 @@ const res = getUser(1)
 //    ^? `never`
 ```
 
-### Getting the stack trace
-
-Enwrap insures that the stack trace is captured correctly, so you don't have to worry about it. You can access the stack trace via the [`error.stack` property](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/stack). (If you find an issue or inconsistent behavior, please open an issue)
-
-```ts
-const getPositiveNumber = ew((err, num: number) => {
-  if (num < 0) {
-    return err('number must be positive')
-  }
-
-  return num + 1
-})
-
-const nextNumber = getPositiveNumber(1)
-//    ^? `WithNoError<number> | TypedError<NonEmptyString, true> | TypedError<'number must be positive'>`
-
-if (nextNumber.error) {
-  console.error(nextNumber.error.stack)
-}
-```
-
 ### Returning Explicit Types
 
 As your TypeScript codebase grows, you may find yourself wanting to return predefined types from your Enwrap functions. Enwrap allows you to do this by setting the return type of the Enwrap function to the type you want to return.
@@ -324,7 +303,28 @@ if (res.error) {
 }
 ```
 
-### How can I get the errors returned from an Enwrap function?
+### How can I get the stack trace?
+
+Enwrap ensures that the stack trace is captured correctly, so you don't have to worry about it. You can access the stack trace via the [`error.stack` property](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/stack). (If you find an issue or inconsistent behavior, please open an issue)
+
+```ts
+const getPositiveNumber = ew((err, num: number) => {
+  if (num < 0) {
+    return err('number must be positive')
+  }
+
+  return num + 1
+})
+
+const nextNumber = getPositiveNumber(1)
+//    ^? `WithNoError<number> | TypedError<NonEmptyString, true> | TypedError<'number must be positive'>`
+
+if (nextNumber.error) {
+  console.error(nextNumber.error.stack)
+}
+```
+
+### How can I get the errors types returned from an Enwrap function?
 
 You can use the `GetReturnTypeErrors` helper type to get the errors from an Enwrap function.
 

@@ -21,7 +21,7 @@ type TypedErrorValue<
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   ExtraData extends Record<string, any> | never = never,
 > = Omit<Error, 'message'> & {
-  __isTypedErrorValue: true
+  __isTypedErrorValue: never
   message: M
   wasThrown: wasThrown
 } & ([ExtraData] extends [never]
@@ -43,7 +43,7 @@ export type TypedError<
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   ExtraData extends Record<string, any> | never = never,
 > = {
-  __isTypedError: true
+  __isTypedError: never
   error: TypedErrorValue<M, wasThrown, ExtraData>
 }
 

@@ -168,12 +168,12 @@ const errorCallback = <
     false,
     any
   >['error']
-  rawError.stack = getParsedStack(rawError)?.editedStack
+  rawError.stack = getParsedStack(rawError)?.[0]
   rawError.extraData = extraData || ({} as any)
   rawError.wasThrown = false
-  return {
-    __isTypedError: true,
-    error: rawError,
+  return { error: rawError } as {
+    __isTypedError: never
+    error: typeof rawError
   }
 }
 type ErrorCallback = typeof errorCallback & { __isErrorCallback: true }
@@ -216,10 +216,7 @@ export const ew = <
       >['error']
       rawError.extraData = {}
       rawError.wasThrown = false
-      return {
-        __isTypedError: true,
-        error: rawError,
-      } as any
+      return { error: rawError } as any
     }
     try {
       if (fn.constructor.name === 'AsyncFunction') {

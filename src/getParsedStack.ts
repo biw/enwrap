@@ -20,12 +20,8 @@ export const getParsedStack = (
   const firstLine = lines[1]
   if (!firstLine) return null
   const colonSplit = firstLine.split(':')
-  const colon = colonSplit[colonSplit.length - 2]
+  const lineNumber = colonSplit[colonSplit.length - 2]
 
   const editedStack = lines.join('\n')
-  return {
-    editedStack,
-    lineNumber: colon,
-    // files,
-  }
+  return [editedStack, lineNumber] as const
 }

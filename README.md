@@ -4,9 +4,9 @@
 [![bundlephobia tree shaking](https://badgen.net/bundlephobia/tree-shaking/enwrap)](https://bundlephobia.com/package/enwrap)
 [![bundlephobia dependency count](https://badgen.net/bundlephobia/dependency-count/enwrap?color=black)](https://github.com/ahoylabs/enwrap/blob/main/package.json)
 
-Enwrap is a very small (752 bytes) and dependency free library that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience.
+Enwrap is a tiny (752 bytes) and dependency-free library that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience.
 
-Unlike other libraries, Enwrap does not require you to learn a new dramatically different syntax, most TypeScript developers will feel right at home after a few minutes.
+Unlike other libraries, Enwrap does not require you to learn a new, dramatically different syntax; most TypeScript developers will feel right at home after a few minutes.
 
 ## Installation
 
@@ -16,7 +16,7 @@ yarn add enwrap
 
 ## Usage
 
-Enwrap has one main function, `ew`, which takes a function and returns a fully typed function with error handling.
+Enwrap has only one function, `ew`, which takes a function and returns a fully typed function with error handling.
 
 ### Basic Example
 
@@ -35,7 +35,7 @@ const getPositiveNumber = ew((err, num: number) => {
 })
 
 const res = getPositiveNumber(1)
-//    ^? `WithNoError<number> | TypedError<NonEmptyString> | TypedError<'number must be positive'>`
+//    ^? `WithNoError<number> | TypedError<NonEmptyString, true> | TypedError<'number must be positive'>`
 
 // if we want to access the number, we need to check if the error is present
 if (res.error) {
@@ -51,7 +51,7 @@ Enwrap supports returning any value from the wrapped function, and will type the
 
 One massive advantage of Enwrap, vs `new Error()` is that all explicit errors are typed. This allows you to handle different types of errors in a type safe manner & with editor autocomplete!
 
-One important thing to note is that since there's no way to type or detect errors that are thrown in a function, Enwrap includes a generic `TypedError<NonEmptyString>` return type for all functions, even ones that don't explicitly return an error.
+One important thing to note is that since there's no way to type or detect errors that are thrown in a function, Enwrap includes a generic `TypedError<NonEmptyString, true>` return type for all functions, even ones that don't explicitly return an error.
 
 ```ts
 const sometimesThrow = () => {
@@ -69,7 +69,7 @@ const getPrimeNumber = ew((err, num: number) => {
   }
 
   // if we have a function which throws an error, it will be caught and returned
-  // as a `TypedError<NonEmptyString>`
+  // as a `TypedError<NonEmptyString, true>`
   sometimesThrow()
 
   // lol this is not a prime number check (but these are example docs)
@@ -77,33 +77,64 @@ const getPrimeNumber = ew((err, num: number) => {
 })
 
 const is50Prime = getPrimeNumber(50)
-//    ^? `WithNoError<boolean> | TypedError<NonEmptyString> | TypedError<'number must be greater than 0'> | TypedError<'number must be greater than 1'>`
+//    ^? `WithNoError<boolean> | TypedError<NonEmptyString, true> | TypedError<'number must be greater than 0'> | TypedError<'number must be greater than 1'>`
 
-if (is50Prime.error === 'number must be greater than 0') {
+if (is50Prime.error?.message === 'number must be greater than 0') {
   // shame the number for not being greater than 0
   alert('shame for negative numbers')
 }
-if (is50Prime.error === 'number must be greater than 1') {
+if (is50Prime.error?.message === 'number must be greater than 1') {
   // look up if 1 is a prime number on wikipedia
   window.open('https://en.wikipedia.org/wiki/Prime_number', '_blank')
 }
 if (is50Prime.error) {
   // this is an error that we didn't expect, and we should probably log it
-  console.error(is50Prime.error)
-  // and then we get the raw error for debugging/sentry/logging/etc
-  console.error(is50Prime.error.rawError)
+  console.error(is50Prime.error.message)
+  // and then send off the error for debugging/sentry/logging/etc
+  sendErrorToLoggingService(is50Prime.error)
 }
 ```
 
-As we can see above, Enwrap will return a union of all possible errors that can occur in the function. This allows you to handle all errors in a type safe manner, while also being able to access the raw error for debugging/sentry/logging/etc.
+As we can see above, Enwrap will return a union of all possible errors that can occur in the function. This allows you to handle all errors in a type-safe manner. The error returned extends the base [`Error` object](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error), so your existing code for debugging/sentry/logging/etc. will work without any changes.
 
-Every `TypedError<T>` includes a `rawError` property, which is the raw error that was thrown. This is useful if you want to access additional properties on the error, or if you want to pass the error to a function that expects a normal `Error` object.
+### Error wasThrown
 
-### Extra Error Data
+Enwrap will set the `wasThrown` property on the error object to `true` if the error was thrown from inside the wrapped function or one of it's children. This is useful in cases where you want to handle throw errors
+vs. expected errors differently.
+
+```ts
+const getPrimeNumber = ew((err, num: number) => {
+  if (num <= 0) {
+    return err('number must be greater than 0')
+  }
+
+  // ....
+
+  if (Math.random() > 1) {
+    // this will never happen, but hopefully this example is clear
+    throw new Error('the random function is broken')
+  }
+  return num
+})
+
+const res = getPrimeNumber(50)
+//    ^? `WithNoError<boolean> | TypedError<NonEmptyString, true> | TypedError<'number must be greater than 0'> | TypedError<'number must be greater than 1'>`
+
+if (res.error.wasThrown) {
+  // this is an error that was thrown from inside the wrapped function
+  console.error(res.error.message)
+} else {
+  // this is an error that was expected
+  console.error(res.error.message)
+  //             ^? `TypedError<'number must be greater than 0'> | TypedError<'number must be greater than 1'>`
+}
+```
+
+### Error Extra Data
 
 There are times when you may want to include extra context/metadata that you want to include when sending the error to error tracking services like Sentry.
 
-Enwrap allows you to do this by passing an object as the second argument to `err`.
+Enwrap allows you to do this by passing an object as the second argument to `err()` callback.
 
 ```ts
 const getUserName = ew(async (err, userId: number) => {
@@ -116,11 +147,11 @@ const getUserName = ew(async (err, userId: number) => {
   return user.name
 })
 const userName = await getUserName(1)
-//    ^? `Promise<WithNoError<string> | TypedError<NonEmptyString> | TypedError<'user not found', { userId: number }>>`
+//    ^? `Promise<WithNoError<string> | TypedError<NonEmptyString, true> | TypedError<'user not found', { userId: number }>>`
 
 if (userName.error) {
   // the extra data is available on the error object
-  console.error(userName.rawError.extraData.userId)
+  console.error(userName.error.extraData?.userId)
 }
 ```
 
@@ -130,7 +161,9 @@ Enwrap takes an opinionated stance on error types, which allows it to provide mo
 
 **You cannot return an object with a `.error` property from any Enwrap function**
 
-Enwrap is designed to prevent footguns, so anytime you try to return an object with an `.error` property, the function return type will be `never`. If you are seeing `never` as the return type of your Enwrap function, you are doing something wrong. (if you don't think you are, please open an issue)
+Enwrap is designed to prevent footguns, so anytime you try to return an object with an `.error` property, the function return type will be `never`.
+
+If you are seeing `never` as the return type of your Enwrap function, you are doing something wrong. (if you don't think you are, please open an issue)
 
 ```ts
 const getUser = ew((err, userId: number) => {
@@ -144,7 +177,7 @@ const res = getUser(1)
 
 ### Getting the stack trace
 
-Enwrap insures that the stack trace is captured correctly, so you don't have to worry about it. You can access the stack trace via the `rawError.stack` property.
+Enwrap insures that the stack trace is captured correctly, so you don't have to worry about it. You can access the stack trace via the [`error.stack` property](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/stack). (If you find an issue or inconsistent behavior, please open an issue)
 
 ```ts
 const getPositiveNumber = ew((err, num: number) => {
@@ -156,10 +189,10 @@ const getPositiveNumber = ew((err, num: number) => {
 })
 
 const nextNumber = getPositiveNumber(1)
-//    ^? `WithNoError<number> | TypedError<NonEmptyString> | TypedError<'number must be positive'>`
+//    ^? `WithNoError<number> | TypedError<NonEmptyString, true> | TypedError<'number must be positive'>`
 
 if (nextNumber.error) {
-  console.error(nextNumber.rawError.stack)
+  console.error(nextNumber.error.stack)
 }
 ```
 
@@ -180,7 +213,7 @@ type User = {
 }
 
 // notice the return type, we are setting it to `WithEW<User, 'missing user'>`
-// no need to manually set `TypedError<NonEmptyString>`
+// no need to manually set `TypedError<NonEmptyString, true>`
 const getUser = ew((err, userId: number): WithEW<User, 'missing user'> => {
   const user = database.getUser(userId)
   if (!user) {
@@ -189,7 +222,7 @@ const getUser = ew((err, userId: number): WithEW<User, 'missing user'> => {
   return user
 })
 const user = getUser(1)
-//    ^? `WithNoError<User> | TypedError<'missing user'> | TypedError<NonEmptyString>`
+//    ^? `WithNoError<User> | TypedError<'missing user'> | TypedError<NonEmptyString, true>`
 ```
 
 If we want to return extra data with our error, we can do so by passing an object
@@ -207,7 +240,7 @@ const getUser = ew((err, userId: number): WithEW<User, { error: 'missing user', 
 })
 
 const user = getUser(1)
-//    ^? `WithNoError<User> | TypedError<'missing user', { userId: number }> | TypedError<NonEmptyString>`
+//    ^? `WithNoError<User> | TypedError<'missing user', { userId: number }> | TypedError<NonEmptyString, true>`
 ```
 
 You can also use the `GetReturnTypeErrors` helper type to get error types from a function, to make combining multiple levels of Enwrap easier.
@@ -216,7 +249,7 @@ You can also use the `GetReturnTypeErrors` helper type to get error types from a
 // continuing from above
 
 type GetUserErrors = GetReturnTypeErrors<typeof getUser>
-//    ^? `TypedError<'missing user', { userId: number }> | TypedError<NonEmptyString>`
+//    ^? `TypedError<'missing user', { userId: number }> | TypedError<NonEmptyString, true>`
 
 const getUserName = ew(
   async (
@@ -235,14 +268,14 @@ const getUserName = ew(
 )
 
 const userName = await getUserName(1)
-//    ^? `WithNoError<string> | TypedError<NonEmptyString> | TypedError<'empty username'> | TypedError<'missing user', { userId: number }>`
+//    ^? `WithNoError<string> | TypedError<NonEmptyString, true> | TypedError<'empty username'> | TypedError<'missing user', { userId: number }>`
 ```
 
 ## FAQ
 
 ### Does Enwrap support async functions?
 
-Yes, Enwrap supports async functions. All returns types are preserved and wrapped in a `Promise`.
+Yes, Enwrap supports async functions. All returns types are preserved and wrapped in a `Promise`. When using `WithEW`, the return type should be wrapped in a `Promise<WithEW<T, E>>`.
 
 ### Why not just use `throw` and `try/catch`?
 
@@ -260,7 +293,7 @@ Enwrap functions can return any value, and will type the value with `WithNoError
 
 ### What happens if I throw a non-error value?
 
-As you may know, you can throw any value in JavaScript/TypeScript. Enwrap will catch any value thrown from a wrapped function, and return it as a `TypedError<NonEmptyString>` with the value of the thrown error as the error message. If it's a non-string value, it will be converted to a string using `String(error)`. If it's an object, it will be converted to a string using `JSON.stringify(error)`. If it's an empty string, it will be converted to `'e'`.
+As you may know, you can throw any value in JavaScript/TypeScript. Enwrap will catch any value thrown from a wrapped function, and return it as a `TypedError<NonEmptyString, true>` with the value of the thrown error as the error message. If it's a non-string value, it will be converted to a string using `String(error)`. If it's an object, it will be converted to a string using `JSON.stringify(error)`. If it's an empty string, it will be converted to the string `'e'`.
 
 Using ESLint's [`no-throw-literal`](https://eslint.org/docs/latest/rules/no-throw-literal) rule is recommended to prevent yourself from throwing non-error values.
 
@@ -271,22 +304,24 @@ const throwNumber = ew(() => {
   throw 123
 })
 const res = throwNumber()
-//    ^? TypedError<NonEmptyString>
+//    ^? TypedError<NonEmptyString, true>
+
+console.log(res.error.message) // "123"
 ```
 
 ### How can I send the error to Sentry or other error tracking services?
 
-Enwrap makes this easy by providing the `rawError` property on all errors. `rawError` is a normal `Error` object, so you can pass it to any function that expects a normal `Error` object. For Sentry, you can use the `TypedErrorToSentry` helper function.
+Just send the error to the error tracking service you normally would.
 
 ```ts
-import { TypedErrorToSentry } from 'enwrap'
-
 // ... your getUser function ...
 
 const res = getUser(1)
 
-const sentryRes = TypedErrorToSentry(res)
-//    ^? `{ errorObj: Error, extraData: { userId: number } | undefined, message: string }`
+if (res.error) {
+  // for example, send the error to Sentry
+  sendErrorToSentry(res.error)
+}
 ```
 
 ### How can I get the errors returned from an Enwrap function?
@@ -300,7 +335,7 @@ const getUser = ew((err, userId: number) => {
   // ...
 })
 type GetUserErrors = GetReturnTypeErrors<typeof getUser>
-//    ^? `TypedError<NonEmptyString> | ...`
+//    ^? `TypedError<NonEmptyString, true> | ...`
 ```
 
 ###
@@ -311,4 +346,4 @@ Please open a [GitHub Issue](https://github.com/biw/enwrap/issues).
 
 ## License
 
-[MIT](https://github.com/ahoylabs/enwrap/blob/main/LICENSE)
+[MIT](https://github.com/biw/enwrap/blob/main/LICENSE)

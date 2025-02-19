@@ -1,18 +1,31 @@
 {
   "name": "enwrap",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "license": "MIT",
   "author": "Ben Williams",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "typings": "dist/index.d.ts",
+  "sideEffects": false,
   "files": [
     "dist",
     "src"
   ],
   "scripts": {
     "analyze": "size-limit --why",
-    "build": "rm -rf dist && tsup src/index.ts --format cjs,esm --dts --minify --treeshake",
+    "build": "rm -rf dist && tsup src/index.ts --format cjs,esm --dts --minify --treeshake --clean",
     "lint": "tsc && eslint src test",
     "prepare": "yarn build",
     "size": "size-limit",
@@ -24,11 +37,11 @@
   "size-limit": [
     {
       "path": "dist/index.mjs",
-      "limit": "10 KB"
+      "limit": "1 KB"
     },
     {
       "path": "dist/index.js",
-      "limit": "10 KB"
+      "limit": "1 KB"
     }
   ],
   "devDependencies": {

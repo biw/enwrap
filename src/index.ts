@@ -1,3 +1,6 @@
+import { getParsedStack } from './getParsedStack'
+import { NonEmptyString, TypedError, WithNoError } from './helperTypes'
+
 /**
  * This parses the error from a try catch block, so that we can get a
  * more accurate error message.
@@ -12,24 +15,10 @@ const parseTryCatchError = (error: unknown): Error => {
 }
 
 /**
- * This is a helper type to make type checking easier for error handling
- *
- * While the type technically requires a space, in practice with the below
- * code, it's actual requirements are to make sure the string is not empty.
- *
- * For example, 'hi' is a valid NonEmptyString, but '' is not.
- *
- * **DO NOT USE THIS TYPE DIRECTLY - For testing purposes only**
- */
-type NonEmptyString = `${string} ${string}` & { __nonEmptyString: never }
-
-/**
  * Merges types to allow for better type descriptions when the user
  * hovers over types in the editor.
  */
-type Prettify<T> = {
-  [K in keyof T]: T[K]
-} & {}
+type Prettify<T> = { [K in keyof T]: T[K] } & {}
 
 /**
  * By making the type arguments of ew const, we can do much more detailed type
@@ -64,13 +53,6 @@ type RemoveReadonlyTuple<T> = T extends readonly [infer U, ...infer U2]
   ? [U, ...U2]
   : T
 
-/**
- * This allows us to add an extra error property to primitive types, without
- * casting all the primitive types as Object types and showing their prototype
- * methods in the IDE type description.
- */
-type WithNoError<T = any> = T & { error?: never }
-
 type WithNoErrorC<T> = WithNoError<Omit<T, '__isCustomEWReturnType'>>
 
 /**
@@ -78,7 +60,7 @@ type WithNoErrorC<T> = WithNoError<Omit<T, '__isCustomEWReturnType'>>
  * void, undefined, primitive types, and finally objects.
  */
 type GetNonErrorTypes<T> = [T] extends [never]
-  ? TypedError<NonEmptyString> | undefined
+  ? TypedError<NonEmptyString, true> | undefined
   : T extends void
     ? undefined
     : T extends null
@@ -97,9 +79,13 @@ type GetNonErrorTypes<T> = [T] extends [never]
         ? WithNoError<RemoveReadonlyTuple<T>>
         : T extends { error: string }
           ? never
-          : T extends { __isCustomEWReturnType?: never }
-            ? WithNoErrorC<T>
-            : Prettify<DeepWriteable<T> & { error?: never }>
+          : T extends { __isTypedError: any }
+            ? never
+            : T extends { __isTypedErrorValue: any }
+              ? never
+              : T extends { __isCustomEWReturnType?: never }
+                ? WithNoErrorC<T>
+                : Prettify<DeepWriteable<T> & { error?: never }>
 
 /**
  * This types all returned errors as the actual string, alongside
@@ -121,57 +107,44 @@ type ClearInvalidErrorType<J> = [J] extends [never]
  * Returns true if the error type is invalid.
  * A valid string is undefined, null, or a non-empty string.
  */
-type HasInvalidErrorType<T> = T extends { __nonEmptyString: any }
+type HasInvalidErrorType<T> = T extends { __invalidCustomEWReturnType: true }
   ? true
-  : T extends { error?: any }
-    ? T extends { __isTypedError: any }
-      ? // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        T extends WithNoError<infer U>
-        ? T extends (...args: never) => unknown
-          ? null
+  : T extends { __nonEmptyString: any }
+    ? true
+    : T extends { __isTypedErrorValue: any }
+      ? true
+      : T extends { error?: any }
+        ? T extends { __isTypedError: any }
+          ? // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            T extends WithNoError<infer U>
+            ? T extends (...args: never) => unknown
+              ? null
+              : true
+            : null
           : true
-        : null
-      : true
-    : [keyof T] extends ['error']
-      ? T extends { __nonEmptyString: any }
-        ? true
-        : // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          T extends WithNoError<infer U>
-          ? T extends (...args: never) => unknown
-            ? null
-            : true
-          : null
-      : T extends { __isErrorCallback: true }
-        ? true
-        : null
-
-export type TypedError<
-  T extends string extends infer J ? (J extends '' ? never : J) : never,
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-  ExtraData extends Record<string, any> | never = never,
-> = {
-  __isTypedError: true
-  error: T
-  rawError: [ExtraData] extends [never]
-    ? Error & { extraData?: never }
-    : keyof ExtraData extends never
-      ? Error & { extraData?: never }
-      : Error & { extraData: ExtraData }
-}
+        : [keyof T] extends ['error']
+          ? T extends { __nonEmptyString: any }
+            ? true
+            : // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              T extends WithNoError<infer U>
+              ? T extends (...args: never) => unknown
+                ? null
+                : true
+              : null
+          : T extends { __isErrorCallback: true }
+            ? true
+            : null
 
 const errorCallback = <
-  T extends string | TypedError<string>,
-  ReturnT extends T extends ''
-    ? never
-    : T extends TypedError<infer J>
-      ? J
-      : never,
+  T extends string,
+  ReturnT extends T extends '' ? never : T,
   const ExtraData extends Record<string, any> | never = never,
 >(
-  msg: ReturnT,
+  msg: BlockEmptyString<BlockGenericString<ReturnT>>,
   extraData?: ExtraData,
 ): TypedError<
   ReturnT,
+  false,
   ExtraData extends never
     ? never
     : ExtraData extends undefined
@@ -190,13 +163,17 @@ const errorCallback = <
         ? ExtraData
         : Prettify<DeepWriteable<ExtraData>>
 > => {
-  const rawError = new Error(msg) as Error & { extraData?: never }
-  rawError.stack = getParsedStack(rawError, { popOffStack: true })?.editedStack
+  const rawError = new Error(msg) as any as TypedError<
+    ReturnT,
+    false,
+    any
+  >['error']
+  rawError.stack = getParsedStack(rawError)?.editedStack
   rawError.extraData = extraData || ({} as any)
+  rawError.wasThrown = false
   return {
     __isTypedError: true,
-    error: msg as any,
-    rawError: rawError as any,
+    error: rawError,
   }
 }
 type ErrorCallback = typeof errorCallback & { __isErrorCallback: true }
@@ -215,7 +192,7 @@ export const ew = <
   FinalRet1 extends [ErrorTypesWithoutInvalid] extends [never]
     ? never
     : [AwaitedRet] extends never
-      ? TypedError<NonEmptyString> | undefined
+      ? TypedError<NonEmptyString, true> | undefined
       : // if the function we are trying to wrap has an invalid error type,
         // we mark it as a never type so the end developer knows that they need
         // to fix the error type
@@ -225,18 +202,23 @@ export const ew = <
           | (HardcodedErrors extends never | undefined
               ? never
               : HardcodedErrors)
-          | TypedError<NonEmptyString>,
+          | TypedError<NonEmptyString, true>,
   FinalRet extends IsPromise extends true ? Promise<FinalRet1> : FinalRet1,
 >(
   fn: (firstArgs: ErrorCallback, ...a: args) => Ret,
 ) => {
   return (...args: args): FinalRet => {
     const handleError = (e: unknown) => {
-      const rawError = parseTryCatchError(e)
+      const rawError = parseTryCatchError(e) as TypedError<
+        NonEmptyString,
+        false,
+        any
+      >['error']
+      rawError.extraData = {}
+      rawError.wasThrown = false
       return {
         __isTypedError: true,
-        error: rawError.message,
-        rawError,
+        error: rawError,
       } as any
     }
     try {
@@ -252,96 +234,82 @@ export const ew = <
   }
 }
 
-type FilterOutEmptyStrings<
-  T extends string | { error: string; extraData?: Record<string, any> },
+type FromErrorStringToTypedError<
+  T extends
+    | string
+    | { error: string; extraData?: Record<string, any> }
+    | TypedError<string, any, any>,
 > = T extends string
   ? T extends ''
     ? never
-    : T
+    : TypedError<T>
   : T extends { error: infer J }
     ? J extends ''
       ? never
-      : T
+      : T extends { __isTypedError: true }
+        ? T
+        : T extends { error: infer J }
+          ? J extends string
+            ? J extends ''
+              ? never
+              : T extends { extraData: infer K }
+                ? K extends Record<string, any>
+                  ? TypedError<J, false, K>
+                  : never
+                : TypedError<J>
+            : T
+          : never
     : never
+
+type BlockEmptyString<T> = T extends '' ? never : T
+
+type IsGenericString<T> = T extends string
+  ? string extends T
+    ? true // `T` is exactly `string`
+    : false // `T` is a string literal
+  : false // `T` is not a string
+
+type BlockGenericString<T> =
+  IsGenericString<T> extends false
+    ? T
+    : IsGenericString<T> extends true
+      ? never
+      : IsGenericString<T> extends boolean
+        ? never
+        : T
+
+type IsGenericErrorString<T> = T extends { error: string }
+  ? IsGenericString<T['error']>
+  : false
+
+type BlockGenericErrorString<T> =
+  IsGenericErrorString<T> extends false
+    ? T
+    : IsGenericErrorString<T> extends true
+      ? never
+      : IsGenericErrorString<T> extends boolean
+        ? never
+        : T
 
 type C<T> = T & { __isCustomEWReturnType?: never }
 
 export type WithEW<
   T,
-  errors extends
+  Errors extends
     | string
     | { error: string; extraData?: Record<string, any> }
-    | TypedError<string> = NonEmptyString,
-  validErrors extends
-    FilterOutEmptyStrings<errors> = FilterOutEmptyStrings<errors>,
-> =
-  | (T extends void ? undefined : C<T>)
-  | (validErrors extends string
-      ? TypedError<validErrors> | TypedError<NonEmptyString>
-      : validErrors extends { error: string }
-        ? validErrors extends TypedError<infer J, infer K>
-          ? TypedError<J, K>
-          : validErrors extends {
-                error: infer J extends string
-                extraData: infer K extends Record<string, any>
-              }
-            ? TypedError<J, K>
-            : validErrors extends { error: infer J extends string }
-              ? TypedError<J>
-              : never
-        : never)
-
-/**
- * Helper function to get the line number of the error.
- *
- * This is useful for debugging/testing, as it allows us to see the exact line
- * that the error occurred on.
- *
- * **This should only be used for testing purposes, please don't use this
- * function directly.**
- */
-const getParsedStack = (
-  e: Error | undefined,
-  // if we parse the error in the file, we want to pop off the first line
-  // since the first line points to the library code, not the user code
-  opts: { popOffStack: boolean } = { popOffStack: false },
-) => {
-  const lines = (e?.stack?.split('\n') || []).filter((_, i) =>
-    opts.popOffStack ? i !== 1 : true,
-  )
-
-  const firstLine = lines[1]
-  if (!firstLine) return null
-  const colonSplit = firstLine.split(':')
-  const colon = colonSplit[colonSplit.length - 2]
-  // const files = lines.slice(1).map((line) => {
-  //   const byColon = line.split(':')
-  //   return byColon[byColon.length - 2],
-  // })
-
-  const editedStack = lines.join('\n')
-  return {
-    editedStack,
-    lineNumber: colon,
-    // files,
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export const typedErrorToSentry = <T extends TypedError<string, {}>>(
-  error: T,
-): {
-  errorObj: Error
-  extraData: T['rawError']['extraData']
-  message: string
-} => {
-  const { extraData, ...errorObj } = error.rawError
-  return {
-    errorObj,
-    extraData: extraData,
-    message: error.error,
-  }
-}
+    | TypedError<string, any, any> = NonEmptyString,
+  ValidErrors extends FromErrorStringToTypedError<
+    BlockGenericErrorString<BlockGenericString<Errors>>
+  > = FromErrorStringToTypedError<
+    BlockGenericErrorString<BlockGenericString<Errors>>
+  >,
+> = [ValidErrors] extends [never]
+  ? { __invalidCustomEWReturnType: true }
+  :
+      | (T extends void ? undefined : T extends null ? null : C<T>)
+      | ValidErrors
+      | TypedError<NonEmptyString, true>
 
 /**
  * A helper type to get the return type errors of a function.
@@ -352,13 +320,4 @@ export const typedErrorToSentry = <T extends TypedError<string, {}>>(
 export type GetReturnTypeErrors<
   T extends (...args: any[]) => any,
   AwaitedT = Awaited<ReturnType<T>>,
-> = AwaitedT extends TypedError<any, any> ? AwaitedT : never
-
-export type __TEST_ONLY = {
-  NonEmptyString: NonEmptyString
-  WithNoError: WithNoError
-}
-
-export const __TEST_ONLY = {
-  getParsedStack,
-}
+> = AwaitedT extends TypedError<any, any, any> ? AwaitedT : never

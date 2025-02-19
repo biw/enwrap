@@ -1,20 +1,8 @@
 import { describe, expect, expectTypeOf, test } from 'vitest'
 
-import {
-  __TEST_ONLY,
-  type __TEST_ONLY as TEST_ONLY,
-  ew,
-  type GetReturnTypeErrors,
-  type TypedError,
-  typedErrorToSentry,
-  type WithEW,
-} from '../src/index'
-
-type NonEmptyString = TEST_ONLY['NonEmptyString']
-
-type WithNoError<T> = T & { error?: never }
-
-const { getParsedStack } = __TEST_ONLY
+import { getParsedStack } from '../src/getParsedStack'
+import { NonEmptyString, TypedError, WithNoError } from '../src/helperTypes'
+import { ew, type GetReturnTypeErrors, type WithEW } from '../src/index'
 
 const noOp = <T extends any[]>(...args: T) => args
 
@@ -30,7 +18,9 @@ describe('ew', () => {
     const res2 = res(1, 2)
 
     expectTypeOf(res2).toEqualTypeOf<
-      WithNoError<number> | TypedError<NonEmptyString> | TypedError<'error'>
+      | WithNoError<number>
+      | TypedError<NonEmptyString, true>
+      | TypedError<'error', false>
     >()
 
     // @ts-expect-error can't access property before error check
@@ -51,7 +41,7 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      WithNoError<string> | TypedError<NonEmptyString>
+      WithNoError<string> | TypedError<NonEmptyString, true>
     >()
 
     expect(res2).toEqual('123')
@@ -63,8 +53,12 @@ describe('ew', () => {
     })
     const res2 = res()
 
+    if (res2.error) {
+      expect(res2.error.wasThrown).toBe(true)
+    }
+
     expectTypeOf(res2).toEqualTypeOf<
-      WithNoError<boolean> | TypedError<NonEmptyString>
+      WithNoError<boolean> | TypedError<NonEmptyString, true>
     >()
 
     expect(res2).toEqual(true)
@@ -76,7 +70,9 @@ describe('ew', () => {
     })
     const res2 = res()
 
-    expectTypeOf(res2).toEqualTypeOf<undefined | TypedError<NonEmptyString>>()
+    expectTypeOf(res2).toEqualTypeOf<
+      undefined | TypedError<NonEmptyString, true>
+    >()
 
     if (res2?.error) {
       expect(1).toBe(2)
@@ -96,7 +92,7 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      undefined | TypedError<NonEmptyString> | TypedError<'error'>
+      undefined | TypedError<NonEmptyString, true> | TypedError<'error'>
     >()
 
     if (res2?.error) {
@@ -113,7 +109,7 @@ describe('ew', () => {
     })
     const res2 = res()
 
-    expectTypeOf(res2).toEqualTypeOf<null | TypedError<NonEmptyString>>()
+    expectTypeOf(res2).toEqualTypeOf<null | TypedError<NonEmptyString, true>>()
 
     if (res2?.error) {
       expect(1).toBe(2)
@@ -133,7 +129,7 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      null | TypedError<NonEmptyString> | TypedError<'error'>
+      null | TypedError<NonEmptyString, true> | TypedError<'error'>
     >()
 
     if (res2?.error) {
@@ -150,7 +146,9 @@ describe('ew', () => {
     })
     const res2 = res()
 
-    expectTypeOf(res2).toEqualTypeOf<undefined | TypedError<NonEmptyString>>()
+    expectTypeOf(res2).toEqualTypeOf<
+      undefined | TypedError<NonEmptyString, true>
+    >()
   })
 
   test('return void or error', () => {
@@ -163,7 +161,7 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      undefined | TypedError<NonEmptyString> | TypedError<'error'>
+      undefined | TypedError<NonEmptyString, true> | TypedError<'error'>
     >()
   })
 
@@ -179,7 +177,35 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      TypedError<NonEmptyString> | TypedError<'errorStr'> | undefined
+      TypedError<NonEmptyString, true> | TypedError<'errorStr'> | undefined
+    >()
+  })
+
+  test('return null using WithEW', () => {
+    const res = ew((err): WithEW<null, 'errorStr'> => {
+      if (Math.random() > 100) {
+        return err('errorStr')
+      }
+      return null
+    })
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      null | TypedError<NonEmptyString, true> | TypedError<'errorStr'>
+    >()
+  })
+
+  test('return undefined using WithEW', () => {
+    const res = ew((err): WithEW<undefined, 'errorStr'> => {
+      if (Math.random() > 100) {
+        return err('errorStr')
+      }
+      return undefined
+    })
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      TypedError<NonEmptyString, true> | TypedError<'errorStr'> | undefined
     >()
   })
 
@@ -193,7 +219,7 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      TypedError<'error123'> | TypedError<NonEmptyString> | undefined
+      TypedError<'error123'> | TypedError<NonEmptyString, true> | undefined
     >()
   })
 
@@ -204,7 +230,7 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      { a: 1; error?: never } | TypedError<NonEmptyString>
+      { a: 1; error?: never } | TypedError<NonEmptyString, true>
     >()
 
     if (res2.error) {
@@ -271,6 +297,22 @@ describe('ew', () => {
     expectTypeOf(res2).toEqualTypeOf<never>()
   })
 
+  test('try to call err with a generic error string', () => {
+    ew((err) => {
+      const x: string = 'error'
+      // @ts-expect-error can't pass in a generic string
+      return err(x)
+    })
+  })
+
+  test('try to call err with a generic any type', () => {
+    ew((err) => {
+      const x: any = 'error'
+      // @ts-expect-error can't pass in a generic any
+      return err(x)
+    })
+  })
+
   test('incorrectly return err function', () => {
     const res = ew((err) => {
       if (Math.random() > 100) {
@@ -280,6 +322,9 @@ describe('ew', () => {
     })
 
     const res2 = res()
+    // don't allow access to property without error check
+    // @ts-expect-error can't access type on never
+    noOp(res2.toString())
 
     expectTypeOf(res2).toEqualTypeOf<never>()
   })
@@ -308,7 +353,7 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      WithNoError<Date> | TypedError<NonEmptyString>
+      WithNoError<Date> | TypedError<NonEmptyString, true>
     >()
   })
 
@@ -319,11 +364,8 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      | TypedError<NonEmptyString, never>
-      | {
-          a: { b: Date }
-          error?: never | undefined
-        }
+      | TypedError<NonEmptyString, true>
+      | { a: { b: Date }; error?: never | undefined }
     >()
   })
 
@@ -334,7 +376,7 @@ describe('ew', () => {
   //   const res2 = res()
 
   //   expectTypeOf(res2).toEqualTypeOf<
-  //     TypedError<'error', { pizza: Date }> | TypedError<NonEmptyString>
+  //     TypedError<'error', { pizza: Date }> | TypedError<NonEmptyString, true>
   //   >()
   // })
 
@@ -347,7 +389,7 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      TypedError<NonEmptyString, never> | WithNoError<() => null>
+      TypedError<NonEmptyString, true> | WithNoError<() => null>
     >()
   })
 
@@ -358,7 +400,7 @@ describe('ew', () => {
     const res2 = res({ a: 1 })
 
     expectTypeOf(res2).toEqualTypeOf<
-      { a: number; b: 2; error?: never } | TypedError<NonEmptyString>
+      { a: number; b: 2; error?: never } | TypedError<NonEmptyString, true>
     >()
 
     if (res2.error) {
@@ -390,22 +432,26 @@ describe('ew', () => {
 
     expectTypeOf(res2).toEqualTypeOf<
       | TypedError<'error'>
-      | TypedError<NonEmptyString>
+      | TypedError<NonEmptyString, true>
       | { a: 123; error?: never }
     >()
 
-    if (res2.error === 'error') {
+    if (res2.error?.message === 'error') {
       const hasErrorString = (_: 'error') => {}
-      hasErrorString(res2.error)
+      hasErrorString(res2.error.message)
       return
     }
+
     // don't allow access to property without error check
     // @ts-expect-error can't access non-error property
     noOp(res2.a)
 
-    expectTypeOf(res2).toEqualTypeOf<
-      TypedError<NonEmptyString> | { a: 123; error?: never }
-    >()
+    // // sadly this doesn't work in typescript (yet)
+    // // see https://github.com/microsoft/TypeScript/issues/30506#issuecomment-474802840
+    // https://github.com/microsoft/TypeScript/issues/31755#issuecomment-498669080
+    // expectTypeOf(res2).toEqualTypeOf<
+    //   TypedError<NonEmptyString, true> | { a: 123; error?: never }
+    // >()
 
     if (res2.error) {
       // @ts-expect-error can't access non-error property
@@ -423,13 +469,15 @@ describe('ew', () => {
     })
     const res2 = res()
 
-    expectTypeOf(res2).toEqualTypeOf<TypedError<NonEmptyString> | undefined>()
+    expectTypeOf(res2).toEqualTypeOf<
+      TypedError<NonEmptyString, true> | undefined
+    >()
 
     // if we don't have a return type, we need to check for nullish
     // vs being able to access the optional error property in order for
     // typescript to narrow the type
     if (res2) {
-      expectTypeOf(res2).toEqualTypeOf<TypedError<NonEmptyString>>()
+      expectTypeOf(res2).toEqualTypeOf<TypedError<NonEmptyString, true>>()
       expect(1).toBe(2)
       return
     }
@@ -444,16 +492,18 @@ describe('ew', () => {
     })
     const res2 = res()
 
-    expect(getParsedStack(res2?.rawError)?.lineNumber).toBe('428')
+    expect(getParsedStack(res2?.error, false)?.lineNumber).toBe('491')
 
-    expectTypeOf(res2).toEqualTypeOf<TypedError<NonEmptyString> | undefined>()
+    expectTypeOf(res2).toEqualTypeOf<
+      TypedError<NonEmptyString, true> | undefined
+    >()
 
     // if we don't have a return type, we need to check for nullish
     // vs being able to access the optional error property in order for
     // typescript to narrow the type
     if (res2) {
-      expectTypeOf(res2).toEqualTypeOf<TypedError<NonEmptyString>>()
-      expect(res2.error).toBe('error')
+      expectTypeOf(res2).toEqualTypeOf<TypedError<NonEmptyString, true>>()
+      expect(res2.error.message).toBe('error')
       return
     }
 
@@ -480,7 +530,7 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      { a: { b: { c: 1 } }; error?: never } | TypedError<NonEmptyString>
+      { a: { b: { c: 1 } }; error?: never } | TypedError<NonEmptyString, true>
     >()
 
     // make sure we can't access error if we don't have it
@@ -546,15 +596,15 @@ describe('ew', () => {
     expectTypeOf(res2).toEqualTypeOf<
       | { a: 1; error?: never }
       | TypedError<'deep-error'>
-      | TypedError<NonEmptyString>
+      | TypedError<NonEmptyString, true>
     >()
 
     if (res2.error) {
-      expect(getParsedStack(res2.rawError)?.lineNumber).toBe('517')
+      expect(getParsedStack(res2.error, false)?.lineNumber).toBe('582')
       expectTypeOf(res2).toEqualTypeOf<
-        TypedError<NonEmptyString> | TypedError<'deep-error'>
+        TypedError<NonEmptyString, true> | TypedError<'deep-error'>
       >()
-      expect(res2.error).toBe('deep-error')
+      expect(res2.error.message).toBe('deep-error')
       return
     }
 
@@ -582,8 +632,8 @@ describe('ew', () => {
 
     expectTypeOf(res2).toEqualTypeOf<
       | TypedError<'deep-error-str'>
-      | TypedError<'deep-error', { pizza: 'pie' }>
-      | TypedError<NonEmptyString>
+      | TypedError<'deep-error', false, { pizza: 'pie' }>
+      | TypedError<NonEmptyString, true>
       | WithNoError<{ a: number }>
     >()
 
@@ -604,9 +654,9 @@ describe('ew', () => {
 
     expectTypeOf(res4).toEqualTypeOf<
       | WithNoError<{ b: number }>
-      | TypedError<'deep-error', { pizza: 'pie' }>
+      | TypedError<'deep-error', false, { pizza: 'pie' }>
       | TypedError<'deep-error-str'>
-      | TypedError<NonEmptyString>
+      | TypedError<NonEmptyString, true>
     >()
   })
 
@@ -629,8 +679,8 @@ describe('ew', () => {
     expectTypeOf(res2).toEqualTypeOf<
       | TypedError<'deep-error-str'>
       | TypedError<'deep-error'>
-      | TypedError<'deep-error', { pizza: 'pie' }>
-      | TypedError<NonEmptyString>
+      | TypedError<'deep-error', false, { pizza: 'pie' }>
+      | TypedError<NonEmptyString, true>
       | WithNoError<{ a: number }>
     >()
 
@@ -659,7 +709,7 @@ describe('ew', () => {
       | TypedError<'deep-error-str'>
       | TypedError<'deep-error'>
       | TypedError<'deep-error21'>
-      | TypedError<NonEmptyString>
+      | TypedError<NonEmptyString, true>
     >()
   })
 
@@ -680,16 +730,16 @@ describe('ew', () => {
 
     expectTypeOf(res2).toEqualTypeOf<
       | { a: 1; error?: never }
-      | TypedError<NonEmptyString>
+      | TypedError<NonEmptyString, true>
       | TypedError<'deep-error'>
     >()
 
     if (res2.error) {
       expectTypeOf(res2).toEqualTypeOf<
-        TypedError<NonEmptyString> | TypedError<'deep-error'>
+        TypedError<NonEmptyString, true> | TypedError<'deep-error'>
       >()
-      expect(getParsedStack(res2.rawError)?.lineNumber).toBe('653')
-      expect(res2.error).toBe('deep-error')
+      expect(getParsedStack(res2.error, false)?.lineNumber).toBe('718')
+      expect(res2.error.message).toBe('deep-error')
       return
     }
 
@@ -714,7 +764,7 @@ describe('ew', () => {
     expectTypeOf(res2).toEqualTypeOf<
       | WithNoError<[1, 2, 'hey']>
       | TypedError<'math-random-error'>
-      | TypedError<NonEmptyString>
+      | TypedError<NonEmptyString, true>
     >()
 
     if (res2.error) {
@@ -732,7 +782,7 @@ describe('ew', () => {
 
     const res2 = res()
     expectTypeOf(res2).toEqualTypeOf<
-      WithNoError<number[]> | TypedError<NonEmptyString>
+      WithNoError<number[]> | TypedError<NonEmptyString, true>
     >()
 
     if (res2.error) {
@@ -745,7 +795,7 @@ describe('ew', () => {
 
   test('allow settings explicit return type with error string', () => {
     // it's import to notice that we are setting any explicit error return
-    // types, but we do not need to set the generic TypedError<NonEmptyString>
+    // types, but we do not need to set the generic TypedError<NonEmptyString, true>
     // type, which is nice
     type ReturnType = { pizza: 'very good' | 'bad'; x: number }
     const res = ew(
@@ -766,12 +816,9 @@ describe('ew', () => {
 
     const res2 = res(1)
     expectTypeOf(res2).toEqualTypeOf<
-      | WithNoError<{
-          pizza: 'very good' | 'bad'
-          x: number
-        }>
-      | TypedError<NonEmptyString>
-      | TypedError<"pizza doesn't exist", { x: number }>
+      | WithNoError<{ pizza: 'very good' | 'bad'; x: number }>
+      | TypedError<NonEmptyString, true>
+      | TypedError<"pizza doesn't exist", false, { x: number }>
     >()
 
     if (res2.error) {
@@ -784,7 +831,7 @@ describe('ew', () => {
 
   test('allow settings explicit return type with error object - no extra data', () => {
     // it's import to notice that we are setting any explicit error return
-    // types, but we do not need to set the generic TypedError<NonEmptyString>
+    // types, but we do not need to set the generic TypedError<NonEmptyString, true>
     // type, which is nice
     type ReturnType = {
       deep: { x: string }
@@ -811,7 +858,7 @@ describe('ew', () => {
           pizza: 'very good' | 'bad'
           x: number
         }>
-      | TypedError<NonEmptyString>
+      | TypedError<NonEmptyString, true>
       | TypedError<"pizza doesn't exist">
     >()
 
@@ -860,8 +907,8 @@ describe('ew', () => {
             x: number
           }>
         >
-      | TypedError<NonEmptyString>
-      | TypedError<"pizza doesn't exist", { x: number }>
+      | TypedError<NonEmptyString, true>
+      | TypedError<"pizza doesn't exist", false, { x: number }>
     >()
 
     if (res2.error) {
@@ -890,6 +937,22 @@ describe('ew', () => {
     expect(res2.deep.x).toBe('bad')
   })
 
+  test('WithEW - async', async () => {
+    const res = ew(
+      async (err): Promise<WithEW<string, TypedError<'error'>>> => {
+        return err('error')
+      },
+    )
+
+    const res2 = await res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      | WithNoError<string & { __isCustomEWReturnType?: never }>
+      | TypedError<'error'>
+      | TypedError<NonEmptyString, true>
+    >()
+  })
+
   test('allow returning extra data with the error', () => {
     const res = ew((err) => {
       return err('error', { thisIsAnItemOfExtraData: 123 })
@@ -897,17 +960,17 @@ describe('ew', () => {
 
     const res2 = res()
 
-    expectTypeOf(res2.rawError.extraData).toEqualTypeOf<
+    expectTypeOf(res2.error.extraData).toEqualTypeOf<
       { thisIsAnItemOfExtraData: 123 } | undefined
     >()
 
     expectTypeOf(res2).toEqualTypeOf<
-      | TypedError<'error', { thisIsAnItemOfExtraData: 123 }>
-      | TypedError<NonEmptyString>
+      | TypedError<'error', false, { thisIsAnItemOfExtraData: 123 }>
+      | TypedError<NonEmptyString, true>
     >()
 
-    if (res2.error === 'error') {
-      expect(res2.rawError.extraData.thisIsAnItemOfExtraData).toBe(123)
+    if (res2.error.message === 'error') {
+      expect(res2.error.extraData.thisIsAnItemOfExtraData).toBe(123)
       return
     }
   })
@@ -928,12 +991,12 @@ describe('ew', () => {
     const res3 = res2()
     expectTypeOf(res3).toEqualTypeOf<
       | { a: 1; error?: never }
-      | TypedError<NonEmptyString>
-      | TypedError<'error', { userID: 123 }>
+      | TypedError<NonEmptyString, true>
+      | TypedError<'error', false, { userID: 123 }>
     >()
 
-    if (res3.error === 'error') {
-      expect(res3.rawError.extraData.userID).toBe(123)
+    if (res3.error?.message === 'error') {
+      expect(res3.error.extraData.userID).toBe(123)
       return
     }
   })
@@ -950,14 +1013,18 @@ describe('ew', () => {
 
     expectTypeOf(res2).toEqualTypeOf<
       Promise<
-        WithNoError<number> | TypedError<NonEmptyString> | TypedError<'error'>
+        | WithNoError<number>
+        | TypedError<NonEmptyString, true>
+        | TypedError<'error'>
       >
     >()
 
     const res3 = await res2
 
     expectTypeOf(res3).toEqualTypeOf<
-      WithNoError<number> | TypedError<NonEmptyString> | TypedError<'error'>
+      | WithNoError<number>
+      | TypedError<NonEmptyString, true>
+      | TypedError<'error'>
     >()
 
     // @ts-expect-error can't access property before error check
@@ -979,21 +1046,23 @@ describe('ew', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<
-      Promise<TypedError<NonEmptyString> | undefined>
+      Promise<TypedError<NonEmptyString, true> | undefined>
     >()
 
     const res3 = await res2
 
-    expectTypeOf(res3).toEqualTypeOf<TypedError<NonEmptyString> | undefined>()
+    expectTypeOf(res3).toEqualTypeOf<
+      TypedError<NonEmptyString, true> | undefined
+    >()
 
-    expect(getParsedStack(res3?.rawError)?.lineNumber).toBe('962')
+    expect(getParsedStack(res3?.error, false)?.lineNumber).toBe('1044')
 
     // if we don't have a return type, we need to check for nullish
     // vs being able to access the optional error property in order for
     // typescript to narrow the type
     if (res3) {
-      expectTypeOf(res3).toEqualTypeOf<TypedError<NonEmptyString>>()
-      expect(res3.error).toBe('error')
+      expectTypeOf(res3).toEqualTypeOf<TypedError<NonEmptyString, true>>()
+      expect(res3.error.message).toBe('error')
       return
     }
 
@@ -1012,7 +1081,7 @@ describe('ew', () => {
     const res2 = res()
 
     if (res2?.error) {
-      expect(res2.error).toBe('error')
+      expect(res2.error.message).toBe('error')
       return
     }
     expect(1).toBe(2)
@@ -1027,7 +1096,7 @@ describe('ew', () => {
     const res2 = res()
 
     if (res2?.error) {
-      expect(res2.error).toBe('{"error":"error"}')
+      expect(res2.error.message).toBe('{"error":"error"}')
       return
     }
     expect(1).toBe(2)
@@ -1042,7 +1111,7 @@ describe('ew', () => {
     const res2 = res()
 
     if (res2?.error) {
-      expect(res2.error).toBe('123')
+      expect(res2.error.message).toBe('123')
       return
     }
     expect(1).toBe(2)
@@ -1057,7 +1126,7 @@ describe('ew', () => {
     const res2 = res()
 
     if (res2?.error) {
-      expect(res2.error).toBe('true')
+      expect(res2.error.message).toBe('true')
       return
     }
     expect(1).toBe(2)
@@ -1072,7 +1141,7 @@ describe('ew', () => {
     const res2 = res()
 
     if (res2?.error) {
-      expect(res2.error).toBe('undefined')
+      expect(res2.error.message).toBe('undefined')
       return
     }
     expect(1).toBe(2)
@@ -1087,7 +1156,7 @@ describe('ew', () => {
     const res2 = res()
 
     if (res2?.error) {
-      expect(res2.error).toBe('e')
+      expect(res2.error.message).toBe('e')
       return
     }
     expect(1).toBe(2)
@@ -1104,7 +1173,7 @@ describe('GetReturnTypeErrors', () => {
 
     type x = GetReturnTypeErrors<typeof res>
 
-    expectTypeOf<x>().toEqualTypeOf<TypedError<NonEmptyString>>()
+    expectTypeOf<x>().toEqualTypeOf<TypedError<NonEmptyString, true>>()
   })
 
   test('with custom error - no extra data', () => {
@@ -1113,10 +1182,10 @@ describe('GetReturnTypeErrors', () => {
       return err('error')
     })
 
-    type errorReturnType = GetReturnTypeErrors<typeof res>
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
 
-    expectTypeOf<errorReturnType>().toEqualTypeOf<
-      TypedError<'error'> | TypedError<NonEmptyString>
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<
+      TypedError<'error'> | TypedError<NonEmptyString, true>
     >()
   })
 
@@ -1126,10 +1195,11 @@ describe('GetReturnTypeErrors', () => {
       return err('error', { userID: 123 })
     })
 
-    type errorReturnType = GetReturnTypeErrors<typeof res>
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
 
-    expectTypeOf<errorReturnType>().toEqualTypeOf<
-      TypedError<'error', { userID: 123 }> | TypedError<NonEmptyString>
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<
+      | TypedError<'error', false, { userID: 123 }>
+      | TypedError<NonEmptyString, true>
     >()
   })
 
@@ -1139,9 +1209,11 @@ describe('GetReturnTypeErrors', () => {
       return 'pizza'
     })
 
-    type errorReturnType = GetReturnTypeErrors<typeof res>
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
 
-    expectTypeOf<errorReturnType>().toEqualTypeOf<TypedError<NonEmptyString>>()
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<
+      TypedError<NonEmptyString, true>
+    >()
   })
 
   test('with array return type', () => {
@@ -1150,9 +1222,11 @@ describe('GetReturnTypeErrors', () => {
       return [1, 2, 3]
     })
 
-    type errorReturnType = GetReturnTypeErrors<typeof res>
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
 
-    expectTypeOf<errorReturnType>().toEqualTypeOf<TypedError<NonEmptyString>>()
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<
+      TypedError<NonEmptyString, true>
+    >()
   })
 
   test('with object return type', () => {
@@ -1161,9 +1235,11 @@ describe('GetReturnTypeErrors', () => {
       return { pizza: 'very good' }
     })
 
-    type errorReturnType = GetReturnTypeErrors<typeof res>
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
 
-    expectTypeOf<errorReturnType>().toEqualTypeOf<TypedError<NonEmptyString>>()
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<
+      TypedError<NonEmptyString, true>
+    >()
   })
 
   test('with no return type', () => {
@@ -1173,9 +1249,11 @@ describe('GetReturnTypeErrors', () => {
       noOp(x)
     })
 
-    type errorReturnType = GetReturnTypeErrors<typeof res>
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
 
-    expectTypeOf<errorReturnType>().toEqualTypeOf<TypedError<NonEmptyString>>()
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<
+      TypedError<NonEmptyString, true>
+    >()
   })
 
   test('with promise return type', () => {
@@ -1190,11 +1268,11 @@ describe('GetReturnTypeErrors', () => {
       return 'pizza'
     })
 
-    type errorReturnType = GetReturnTypeErrors<typeof res>
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
 
-    expectTypeOf<errorReturnType>().toEqualTypeOf<
-      | TypedError<NonEmptyString>
-      | TypedError<'error123', { x: 123 }>
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<
+      | TypedError<NonEmptyString, true>
+      | TypedError<'error123', false, { x: 123 }>
       | TypedError<'error456'>
     >()
   })
@@ -1204,14 +1282,15 @@ describe('GetReturnTypeErrors', () => {
       return err('error', { userID: 123 })
     })
 
-    type errorReturnType = GetReturnTypeErrors<typeof res>
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
 
-    expectTypeOf<errorReturnType>().toEqualTypeOf<
-      TypedError<'error', { userID: 123 }> | TypedError<NonEmptyString>
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<
+      | TypedError<'error', false, { userID: 123 }>
+      | TypedError<NonEmptyString, true>
     >()
 
     const res2 = ew(
-      (err): WithEW<{ b: 1 }, errorReturnType | TypedError<'error'>> => {
+      (err): WithEW<{ b: 1 }, ErrorReturnType | TypedError<'error'>> => {
         const resInner = res()
         if (resInner.error) {
           return resInner
@@ -1234,35 +1313,149 @@ describe('GetReturnTypeErrors', () => {
 
     expectTypeOf(res3).toEqualTypeOf<
       | WithNoError<{ b: 1 }>
-      | errorReturnType
-      | TypedError<'error', { userID: 123 }>
+      | ErrorReturnType
+      | TypedError<'error', false, { userID: 123 }>
       | TypedError<'error'>
     >()
 
     type errorReturnType2 = GetReturnTypeErrors<typeof res2>
 
     expectTypeOf<errorReturnType2>().toEqualTypeOf<
-      | errorReturnType
+      | ErrorReturnType
       | TypedError<'error'>
-      | TypedError<'error', { userID: 123 }>
+      | TypedError<'error', false, { userID: 123 }>
     >()
   })
-})
 
-describe('typedErrorToSentry', () => {
-  test('basic', () => {
-    const res = ew((err) => {
-      return err('error', { userID: 123 })
+  test('withEW without the error type', () => {
+    const res = ew((err): WithEW<{ a: 1 }> => {
+      if (Math.random() > 100) {
+        // @ts-expect-error can't return an error if WithEW doesn't have an error type
+        return err('crazy-error')
+      }
+      return { a: 1 }
     })
-    const sentryRes = typedErrorToSentry(res())
 
-    expectTypeOf(sentryRes).toEqualTypeOf<{
-      errorObj: Error
-      extraData: { userID: 123 } | undefined
-      message: string
-    }>()
+    const res2 = res()
 
-    expect(sentryRes.message).toBe('error')
-    expect(sentryRes.extraData?.userID).toBe(123)
+    expectTypeOf(res2).toEqualTypeOf<
+      WithNoError<{ a: 1 }> | TypedError<NonEmptyString, true>
+    >()
+  })
+
+  test('withEW invalid string error type', () => {
+    const res = ew((err): WithEW<{ a: 1 }, string> => {
+      if (Math.random() > 100) {
+        // @ts-expect-error the return type is now never due to the string error type
+        return err('error')
+      }
+      // @ts-expect-error the return type is now never due to the string error type
+      return { a: 1 }
+    })
+
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<never>()
+
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<never>()
+  })
+
+  test('withEW invalid string error type', () => {
+    const res = ew((err): WithEW<{ a: 1 }, any> => {
+      if (Math.random() > 100) {
+        // @ts-expect-error the return type is now never due to the string error type
+        return err('error')
+      }
+      // @ts-expect-error the return type is now never due to the string error type
+      return { a: 1 }
+    })
+
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<never>()
+
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<never>()
+  })
+
+  test('withEW invalid string error object type', () => {
+    const res = ew((err): WithEW<{ a: 1 }, { error: string }> => {
+      if (Math.random() > 100) {
+        // @ts-expect-error the return type is now never due to the string error type
+        return err('error')
+      }
+      // @ts-expect-error the return type is now never due to the string error type
+      return { a: 1 }
+    })
+
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<never>()
+
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<never>()
+  })
+
+  test('withEW invalid any error object type', () => {
+    const res = ew((err): WithEW<{ a: 1 }, { error: any }> => {
+      if (Math.random() > 100) {
+        // @ts-expect-error the return type is now never due to the string error type
+        return err('error')
+      }
+      // @ts-expect-error the return type is now never due to the string error type
+      return { a: 1 }
+    })
+
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<never>()
+
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<never>()
+  })
+
+  test('return type ignores all empty error strings', () => {
+    ew((err) => {
+      // @ts-expect-error can't use an empty error string
+      return err('')
+    })
+  })
+
+  test('withEW fail with never error return type', () => {
+    const res = ew((): WithEW<{ a: 1 }, never> => {
+      // @ts-expect-error can't return a never error type
+      return 234
+    })
+
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<never>()
+  })
+
+  test('withEW ignore all empty error strings', () => {
+    const res = ew((): WithEW<{ a: 1 }, ''> => {
+      // @ts-expect-error can't return a never error type
+      return 234
+    })
+
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<never>()
+  })
+
+  test('withEW ignore all empty error strings', () => {
+    const res = ew((): WithEW<{ a: 1 }, { error: '' }> => {
+      // @ts-expect-error can't return a never error type
+      return 234
+    })
+
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<never>()
   })
 })

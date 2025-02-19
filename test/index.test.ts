@@ -369,16 +369,17 @@ describe('ew', () => {
     >()
   })
 
-  // test('return a Date object in extra data', () => {
-  //   const res = ew((err) => {
-  //     return err('error', { pizza: new Date() })
-  //   })
-  //   const res2 = res()
+  test('return a Date object in extra data', () => {
+    const res = ew((err) => {
+      return err('error', { pizza: new Date() })
+    })
+    const res2 = res()
 
-  //   expectTypeOf(res2).toEqualTypeOf<
-  //     TypedError<'error', { pizza: Date }> | TypedError<NonEmptyString, true>
-  //   >()
-  // })
+    expectTypeOf(res2).toEqualTypeOf<
+      | TypedError<'error', false, { pizza: Date }>
+      | TypedError<NonEmptyString, true>
+    >()
+  })
 
   test('return a function', () => {
     const res = ew(() => {
@@ -492,7 +493,7 @@ describe('ew', () => {
     })
     const res2 = res()
 
-    expect(getParsedStack(res2?.error, false)?.[1]).toBe('491')
+    expect(getParsedStack(res2?.error, false)?.[1]).toBe('492')
 
     expectTypeOf(res2).toEqualTypeOf<
       TypedError<NonEmptyString, true> | undefined
@@ -600,7 +601,7 @@ describe('ew', () => {
     >()
 
     if (res2.error) {
-      expect(getParsedStack(res2.error, false)?.[1]).toBe('582')
+      expect(getParsedStack(res2.error, false)?.[1]).toBe('583')
       expectTypeOf(res2).toEqualTypeOf<
         TypedError<NonEmptyString, true> | TypedError<'deep-error'>
       >()
@@ -738,7 +739,7 @@ describe('ew', () => {
       expectTypeOf(res2).toEqualTypeOf<
         TypedError<NonEmptyString, true> | TypedError<'deep-error'>
       >()
-      expect(getParsedStack(res2.error, false)?.[1]).toBe('718')
+      expect(getParsedStack(res2.error, false)?.[1]).toBe('719')
       expect(res2.error.message).toBe('deep-error')
       return
     }
@@ -1055,7 +1056,7 @@ describe('ew', () => {
       TypedError<NonEmptyString, true> | undefined
     >()
 
-    expect(getParsedStack(res3?.error, false)?.[1]).toBe('1044')
+    expect(getParsedStack(res3?.error, false)?.[1]).toBe('1045')
 
     // if we don't have a return type, we need to check for nullish
     // vs being able to access the optional error property in order for

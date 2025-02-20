@@ -1,10 +1,10 @@
 # Enwrap
 
-[![bundlephobia minzip](https://badgen.net/bundlephobia/minzip/enwrap)](https://bundlephobia.com/package/enwrap)
+[![bundlephobia minzip](https://img.shields.io/bundlejs/size/enwrap)](https://bundlephobia.com/package/enwrap)
 [![bundlephobia tree shaking](https://badgen.net/bundlephobia/tree-shaking/enwrap)](https://bundlephobia.com/package/enwrap)
 [![bundlephobia dependency count](https://badgen.net/bundlephobia/dependency-count/enwrap?color=black)](https://github.com/biw/enwrap/blob/main/package.json)
 
-Enwrap is a tiny (504 bytes) and dependency-free library that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience.
+Enwrap is a tiny (423 bytes gzipped) and dependency-free library that allows you to wrap functions and return typed errors, with a focus on ease of use and developer experience.
 
 Unlike other libraries, Enwrap does not require you to learn a new, dramatically different syntax; most TypeScript developers will feel right at home after a few minutes.
 

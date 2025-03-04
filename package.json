@@ -1,10 +1,11 @@
 {
   "name": "enwrap",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "Tiny function wrapper that returns typed errors",
   "license": "MIT",
   "author": "Ben Williams",
   "repository": "https://github.com/biw/enwrap",
+  "homepage": "https://github.com/biw/enwrap",
   "bugs": {
     "url": "https://github.com/biw/enwrap/issues"
   },

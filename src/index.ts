@@ -139,30 +139,51 @@ const errorCallback = <
   T extends string,
   ReturnT extends T extends '' ? never : T,
   const ExtraData extends Record<string, any> | never = never,
+  ErrorType extends TypedError<
+    ReturnT,
+    false,
+    ExtraData extends never
+      ? never
+      : ExtraData extends undefined
+        ? never
+        : ExtraData extends
+              | number
+              | string
+              | boolean
+              | bigint
+              | symbol
+              | any[]
+              | readonly any[]
+              | readonly [any, ...any]
+              | ((...args: never) => unknown)
+              | Date
+          ? ExtraData
+          : Prettify<DeepWriteable<ExtraData>>
+  > = TypedError<
+    ReturnT,
+    false,
+    ExtraData extends never
+      ? never
+      : ExtraData extends undefined
+        ? never
+        : ExtraData extends
+              | number
+              | string
+              | boolean
+              | bigint
+              | symbol
+              | any[]
+              | readonly any[]
+              | readonly [any, ...any]
+              | ((...args: never) => unknown)
+              | Date
+          ? ExtraData
+          : Prettify<DeepWriteable<ExtraData>>
+  >,
 >(
   msg: BlockEmptyString<BlockGenericString<ReturnT>>,
   extraData?: ExtraData,
-): TypedError<
-  ReturnT,
-  false,
-  ExtraData extends never
-    ? never
-    : ExtraData extends undefined
-      ? never
-      : ExtraData extends
-            | number
-            | string
-            | boolean
-            | bigint
-            | symbol
-            | any[]
-            | readonly any[]
-            | readonly [any, ...any]
-            | ((...args: never) => unknown)
-            | Date
-        ? ExtraData
-        : Prettify<DeepWriteable<ExtraData>>
-> => {
+): ErrorType => {
   const rawError = new Error(msg) as any as TypedError<
     ReturnT,
     false,
@@ -171,11 +192,9 @@ const errorCallback = <
   rawError.stack = getParsedStack(rawError)?.[0]
   rawError.extraData = extraData || ({} as any)
   rawError.wasThrown = false
-  return { error: rawError } as {
-    __isTypedError: never
-    error: typeof rawError
-  }
+  return { error: rawError } as ErrorType
 }
+
 type ErrorCallback = typeof errorCallback & { __isErrorCallback: true }
 
 export const ew = <

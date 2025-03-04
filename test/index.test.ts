@@ -1328,6 +1328,42 @@ describe('GetReturnTypeErrors', () => {
     >()
   })
 
+  test('WithEW returning extra data and string errors', () => {
+    const res = ew(
+      (
+        err,
+      ): WithEW<
+        { a: 1 },
+        'error 123' | { error: 'error'; extraData: { userID: 123 } }
+      > => {
+        if (Math.random() > 100) {
+          return err('error', { userID: 123 })
+        }
+        if (Math.random() > 100) {
+          return err('error 123')
+        }
+        return { a: 1 }
+      },
+    )
+
+    type ErrorReturnType = GetReturnTypeErrors<typeof res>
+
+    expectTypeOf<ErrorReturnType>().toEqualTypeOf<
+      | TypedError<'error', false, { userID: 123 }>
+      | TypedError<'error 123'>
+      | TypedError<NonEmptyString, true>
+    >()
+
+    const res2 = res()
+
+    expectTypeOf(res2).toEqualTypeOf<
+      | WithNoError<{ a: 1 }>
+      | TypedError<NonEmptyString, true>
+      | TypedError<'error 123'>
+      | TypedError<'error', false, { userID: 123 }>
+    >()
+  })
+
   test('withEW without the error type', () => {
     const res = ew((err): WithEW<{ a: 1 }> => {
       if (Math.random() > 100) {

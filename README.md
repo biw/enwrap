@@ -8,6 +8,9 @@ Enwrap is a tiny (423 bytes gzipped) and dependency-free library that allows you
 
 Unlike other libraries, Enwrap does not require you to learn a new, dramatically different syntax; most TypeScript developers will feel right at home after a few minutes.
 
+> [!IMPORTANT]  
+> Although Enwrap is currently in multiple production codebases, Enwrap still has a few rough edges where the library has overly strict types. If you hit a rough edge or something feels more complicated to do than you think it should, please open a ticket! 
+
 ## Installation
 
 ```bash
@@ -45,11 +48,11 @@ if (res.error) {
 }
 ```
 
-Enwrap supports returning any value from the wrapped function, and will type the value with `WithNoError<T>`, which is a type that represents a value that is not an error. There's nothing special about `WithNoError<T>` from a runtime perspective, it's just a normal type.
+Enwrap supports returning any value from the wrapped function, and will type the value with `WithNoError<T>`, which is a type that represents a value that is not an error. From a runtime perspective, there's nothing special about `WithNoError<T>; it's just a wrapper type.
 
 ### Typed Error Handling
 
-One massive advantage of Enwrap, vs. `throw new Error()` is that all explicit errors are typed. This allows you to handle different types of errors in a type safe manner & with editor autocomplete!
+One massive advantage of Enwrap, vs. `throw new Error()` is that all explicit errors are typed. This allows you to handle different types of errors in a type-safe manner & with editor autocomplete!
 
 One important thing to note is that since there's no way to type or detect errors that are thrown in a function, Enwrap includes a generic `TypedError<NonEmptyString, true>` return type for all functions, even ones that don't explicitly return an error.
 
@@ -68,7 +71,7 @@ const getPrimeNumber = ew((err, num: number) => {
     return err('number must be greater than 1')
   }
 
-  // if we have a function which throws an error, it will be caught and returned
+  // If we have a function that throws an error, it will be caught and returned
   // as a `TypedError<NonEmptyString, true>`
   sometimesThrow()
 
@@ -84,11 +87,11 @@ if (is50Prime.error?.message === 'number must be greater than 0') {
   alert('shame for negative numbers')
 }
 if (is50Prime.error?.message === 'number must be greater than 1') {
-  // look up if 1 is a prime number on wikipedia
+  // Look up if 1 is a prime number on Wikipedia
   window.open('https://en.wikipedia.org/wiki/Prime_number', '_blank')
 }
 if (is50Prime.error) {
-  // this is an error that we didn't expect, and we should probably log it
+  // This is an error that we didn't expect, and we should probably log it
   console.error(is50Prime.error.message)
   // and then send off the error for debugging/sentry/logging/etc
   sendErrorToLoggingService(is50Prime.error)
@@ -159,7 +162,8 @@ if (userName.error) {
 
 Enwrap takes an opinionated stance on error types, which allows it to provide more helpful error messages and better integration with TypeScript. However, this means that any type returned from the wrapped function must be a valid error type or non-error type.
 
-**You cannot return an object with a `.error` property from any Enwrap function**
+> [!CAUTION]
+> **You cannot return an object with a `.error` property from an Enwrap function**
 
 Enwrap is designed to prevent footguns, so anytime you try to return an object with an `.error` property, the function return type will be `never`.
 
@@ -177,11 +181,12 @@ const res = getUser(1)
 
 ### Returning Explicit Types
 
-As your TypeScript codebase grows, you may find yourself wanting to return predefined types from your Enwrap functions. Enwrap allows you to do this by setting the return type of the Enwrap function to the type you want to return.
+As your TypeScript codebase grows, you may want to return predefined types from your Enwrap functions. Enwrap allows you to do this by setting the return type of the Enwrap function to the type you wish to return.
 
-**The only caveat to this is that you must set any explicit error types manually.**
+> [!NOTE]  
+> **When returning explict types, you must manually set any explicit error types.**
 
-In order to return an explicit type, we will use the `WithEW` helper type.
+To return an explicit type, we will use the `WithEW` helper type.
 
 ```ts
 import { type WithEW, ew } from 'enwrap'
@@ -222,7 +227,8 @@ const user = getUser(1)
 //    ^? `WithNoError<User> | TypedError<'missing user', { userId: number }> | TypedError<NonEmptyString, true>`
 ```
 
-You can also use the `GetReturnTypeErrors` helper type to get error types from a function, to make combining multiple levels of Enwrap easier.
+> [!TIP]
+> You can also use the `GetReturnTypeErrors` helper type to get error types from a function, to make combining multiple levels of Enwrap easier.
 
 ```ts
 // continuing from above
@@ -258,17 +264,17 @@ Yes, Enwrap supports async functions. All returns types are preserved and wrappe
 
 ### Why not just use `throw` and `try/catch`?
 
-Using `throw` and `try/catch` is a valid approach to error handling, but lacks the type safety that Enwrap provides. Enwrap intentionally takes a different approach by allowing you to keep using your existing error handling patterns, while incrementally adding more safety. You can still use `throw` and `try/catch` with Enwrap, it just won't be type safe.
+Using `throw` and `try/catch` is a valid approach to error handling, but it lacks the type safety that Enwrap provides. Enwrap intentionally takes a different approach by allowing you to keep using your existing error handling patterns, while incrementally adding more safety. You can still use `throw` and `try/catch` with Enwrap, it just won't be type safe.
 
 ### Why not use a library like `ts-results` or `neverthrow`?
 
 Enwrap is designed to be a simple, lightweight library that allows you to add typed errors to your functions without learning a new syntax. With only one main export, it is designed to be easy to add to existing codebases, incrementally adopted, and easy for developers on your team to understand.
 
-If you are looking for a library that provides a more complex error handling system and more features, you may want to look into [`ts-results`](https://github.com/vultix/ts-results) or [`neverthrow`](https://github.com/supermacro/neverthrow).
+If you are looking for a library that provides a more complex error-handling system and more features, you may want to look into [`ts-results`](https://github.com/vultix/ts-results) or [`neverthrow`](https://github.com/supermacro/neverthrow).
 
 ### What kind of values can I return from an Enwrap function?
 
-Enwrap functions can return any value, and will type the value with `WithNoError<T>`, which is a type that represents a value that is not an error. There's nothing special about `WithNoError<T>` from a runtime perspective, it's just a normal type.
+Enwrap functions can return any value, including `void`, `null`, and `undefined`.
 
 ### What happens if I throw a non-error value?
 
@@ -303,28 +309,7 @@ if (res.error) {
 }
 ```
 
-### How can I get the stack trace?
-
-Enwrap ensures that the stack trace is captured correctly, so you don't have to worry about it. You can access the stack trace via the [`error.stack` property](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/stack). (If you find an issue or inconsistent behavior, please open an issue)
-
-```ts
-const getPositiveNumber = ew((err, num: number) => {
-  if (num < 0) {
-    return err('number must be positive')
-  }
-
-  return num + 1
-})
-
-const nextNumber = getPositiveNumber(1)
-//    ^? `WithNoError<number> | TypedError<NonEmptyString, true> | TypedError<'number must be positive'>`
-
-if (nextNumber.error) {
-  console.error(nextNumber.error.stack)
-}
-```
-
-### How can I get the errors types returned from an Enwrap function?
+### How can I get the error types returned from an Enwrap function?
 
 You can use the `GetReturnTypeErrors` helper type to get the errors from an Enwrap function.
 

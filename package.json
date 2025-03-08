@@ -1,6 +1,6 @@
 {
   "name": "enwrap",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "Tiny function wrapper that returns typed errors",
   "license": "MIT",
   "author": "Ben Williams",
@@ -31,6 +31,7 @@
   ],
   "scripts": {
     "build": "rm -rf dist && tsup src/index.ts --format cjs,esm --dts --minify --treeshake --clean",
+    "postpublish": "PACKAGE_VERSION=$(cat package.json | grep \\\"version\\\" | head -1 | awk -F: '{ print $2 }' | sed 's/[\",]//g' | tr -d '[[:space:]]') && git tag v$PACKAGE_VERSION && git push --tags",
     "lint": "tsc && eslint src test",
     "prepare": "yarn build",
     "size": "size-limit",

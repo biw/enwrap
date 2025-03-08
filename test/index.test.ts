@@ -878,6 +878,7 @@ describe('ew', () => {
   test('allow settings explicit readonly return type with error object - with extra data', () => {
     // one important but to notice is that we can't control
     type ReturnType = Readonly<{
+      d2: readonly [string, number]
       deep: Readonly<{ x: string }>
       pizza: 'very good' | 'bad'
       x: number
@@ -895,7 +896,12 @@ describe('ew', () => {
         if (Math.random() > 100) {
           return err("pizza doesn't exist", { x: num })
         }
-        return { deep: { x: 'hey' }, pizza: 'very good', x: num }
+        return {
+          d2: ['hey', 1],
+          deep: { x: 'hey' },
+          pizza: 'very good',
+          x: num,
+        }
       },
     )
 
@@ -903,6 +909,7 @@ describe('ew', () => {
     expectTypeOf(res2).toEqualTypeOf<
       | WithNoError<
           Readonly<{
+            d2: readonly [string, number]
             deep: Readonly<{ x: string }>
             pizza: 'very good' | 'bad'
             x: number
@@ -920,6 +927,7 @@ describe('ew', () => {
     expectTypeOf(res2).toEqualTypeOf<
       WithNoError<
         Readonly<{
+          d2: readonly [string, number]
           deep: Readonly<{ x: string }>
           pizza: 'very good' | 'bad'
           x: number
@@ -947,8 +955,12 @@ describe('ew', () => {
 
     const res2 = await res()
 
+    if (res2.error) {
+      expect(1).toBe(1)
+    }
+
     expectTypeOf(res2).toEqualTypeOf<
-      | WithNoError<string & { __isCustomEWReturnType?: never }>
+      | WithNoError<Omit<string, 'error'>>
       | TypedError<'error'>
       | TypedError<NonEmptyString, true>
     >()
@@ -1056,7 +1068,7 @@ describe('ew', () => {
       TypedError<NonEmptyString, true> | undefined
     >()
 
-    expect(getParsedStack(res3?.error, false)?.[1]).toBe('1045')
+    expect(getParsedStack(res3?.error, false)?.[1]).toBe('1057')
 
     // if we don't have a return type, we need to check for nullish
     // vs being able to access the optional error property in order for
@@ -1494,5 +1506,83 @@ describe('GetReturnTypeErrors', () => {
     const res2 = res()
 
     expectTypeOf(res2).toEqualTypeOf<never>()
+  })
+
+  test('WithEW explicit function type annotation', () => {
+    type RetType = (x: string) => WithEW<{
+      a: { num: string }[]
+      b: string
+    }>
+
+    const func: RetType = ew((err, x) => {
+      if (x === 'pizza') {
+        return {
+          a: [{ num: '123' }],
+          b: '123',
+        }
+      }
+      return {
+        a: [{ num: '123' }],
+        b: '123',
+      }
+    })
+
+    const res = func('pizza')
+
+    if (res.error) {
+      expect(1).toEqual(2)
+    }
+
+    expectTypeOf(res).toEqualTypeOf<
+      WithEW<{ a: { num: string }[]; b: string }>
+    >()
+
+    expectTypeOf(res).toEqualTypeOf<
+      | ({ a: { num: string }[]; b: string } & {
+          __isCustomEWReturnType?: never
+          error?: never
+        })
+      | TypedError<NonEmptyString, true>
+    >()
+  })
+
+  test('explicit function type annotation w/ cast', () => {
+    type RetType = () => WithEW<
+      { a: { num: string }[]; b: string },
+      'general-error'
+    >
+
+    // in version 0.0.13 and below, the return type of `RetType`
+    // plus casting any field on an object causes enwrap to
+    // ignore the fact that the return type was incorrectly typed
+    // and missing the `b` field
+    // @ts-expect-error ^^^
+    const func: RetType = ew((err) => {
+      if (Math.random() > 100) {
+        return err('general-error')
+      }
+      return {
+        a: [{ num: '123' as string }] as any,
+      }
+    })
+
+    const res = func()
+
+    if (res.error) {
+      expect(1).toEqual(2)
+    }
+
+    expectTypeOf(res).toEqualTypeOf<
+      WithEW<{ a: { num: string }[]; b: string }, 'general-error'>
+    >()
+
+    expectTypeOf(res).toEqualTypeOf<
+      | ({ a: { num: string }[]; b: string } & {
+          __isCustomEWReturnType?: never
+          error?: never
+        })
+      | TypedError<'general-error'>
+      | TypedError<NonEmptyString>
+    >()
   })
 })

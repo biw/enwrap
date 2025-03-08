@@ -36,8 +36,6 @@ type DeepWriteable<T> = {
     | bigint
     | symbol
     | any[]
-    | readonly any[]
-    | readonly [any, ...any]
     | ((...args: never) => unknown)
     | Date
     ? T[P]
@@ -189,7 +187,7 @@ const errorCallback = <
     false,
     any
   >['error']
-  rawError.stack = getParsedStack(rawError)?.[0]
+  rawError.stack = getParsedStack(rawError)?.[0] ?? ''
   rawError.extraData = extraData || ({} as any)
   rawError.wasThrown = false
   return { error: rawError } as ErrorType
@@ -197,18 +195,23 @@ const errorCallback = <
 
 type ErrorCallback = typeof errorCallback & { __isErrorCallback: true }
 
+type FilterOutUsingWithEW<T> = T extends { __isCustomEWReturnType?: any }
+  ? Omit<T, 'error'>
+  : T
+
 export const ew = <
   const args extends any[],
   const Ret,
   AwaitedRet extends Awaited<Ret>,
-  NonErrorTypes extends GetNonErrorTypes<AwaitedRet>,
-  HardcodedErrors extends GetHardcodedErrors<AwaitedRet>,
-  ErrorTypesWithoutInvalid extends ClearInvalidErrorType<AwaitedRet>,
+  FilteredRet extends FilterOutUsingWithEW<AwaitedRet>,
+  NonErrorTypes extends GetNonErrorTypes<FilteredRet>,
+  HardcodedErrors extends GetHardcodedErrors<FilteredRet>,
+  ErrorTypesWithoutInvalid extends ClearInvalidErrorType<FilteredRet>,
   IsPromise extends [Ret] extends [AwaitedRet] ? false : true,
   // if we have a function that only throws and does not return anything,
   // we need to type check it and return a NonEmptyString since it is wrapped
   // and will return the error
-  FinalRet1 extends [ErrorTypesWithoutInvalid] extends [never]
+  AwaitedFinalRet extends [ErrorTypesWithoutInvalid] extends [never]
     ? never
     : [AwaitedRet] extends never
       ? TypedError<NonEmptyString, true> | undefined
@@ -222,11 +225,13 @@ export const ew = <
               ? never
               : HardcodedErrors)
           | TypedError<NonEmptyString, true>,
-  FinalRet extends IsPromise extends true ? Promise<FinalRet1> : FinalRet1,
+  FinalRet extends IsPromise extends true
+    ? Promise<AwaitedFinalRet>
+    : AwaitedFinalRet,
 >(
   fn: (firstArgs: ErrorCallback, ...a: args) => Ret,
 ) => {
-  return (...args: args): FinalRet => {
+  return (...args: args): FinalRet extends infer U ? U : never => {
     const handleError = (e: unknown) => {
       const rawError = parseTryCatchError(e) as TypedError<
         NonEmptyString,
@@ -240,7 +245,7 @@ export const ew = <
     try {
       if (fn.constructor.name === 'AsyncFunction') {
         return (fn(errorCallback as ErrorCallback, ...args) as any)
-          .then((res: any) => res as any)
+          .then((res: any) => res)
           .catch((e: unknown) => handleError(e))
       }
       return fn(errorCallback as ErrorCallback, ...args) as any
@@ -307,7 +312,7 @@ type BlockGenericErrorString<T> =
         ? never
         : T
 
-type C<T> = T & { __isCustomEWReturnType?: never }
+type C<T> = T & { __isCustomEWReturnType?: never; error?: never }
 
 export type WithEW<
   T,

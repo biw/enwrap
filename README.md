@@ -14,7 +14,7 @@ Unlike other libraries, Enwrap does not require you to learn a new, dramatically
 ## Installation
 
 ```bash
-yarn add enwrap
+pnpm add enwrap
 ```
 
 ## Usage

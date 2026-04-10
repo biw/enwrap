@@ -18,7 +18,6 @@ export type NonEmptyString = `${string} ${string}` & { __nonEmptyString: never }
 type TypedErrorValue<
   M extends string extends infer J ? (J extends '' ? never : J) : never,
   wasThrown extends boolean = false,
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   ExtraData extends Record<string, any> | never = never,
 > = Omit<Error, 'message'> & {
   __isTypedErrorValue: never
@@ -40,7 +39,6 @@ type TypedErrorValue<
 export type TypedError<
   M extends string extends infer J ? (J extends '' ? never : J) : never,
   wasThrown extends boolean = M extends NonEmptyString ? true : false,
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   ExtraData extends Record<string, any> | never = never,
 > = {
   __isTypedError: never

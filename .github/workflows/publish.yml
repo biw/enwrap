@@ -1,0 +1,102 @@
+name: Publish to npm
+
+on:
+  push:
+    branches:
+      - main
+
+# Required permissions for npm provenance and GitHub releases
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version-changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.check.outputs.version }}
+      should-publish: ${{ steps.check.outputs.should_publish }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check if version should be published
+        id: check
+        run: |
+          # Get current version from package.json
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version in package.json: $CURRENT_VERSION"
+
+          # Get published version from npm (if it exists)
+          PUBLISHED_VERSION=$(npm view enwrap version 2>/dev/null || echo "none")
+          echo "Published version on npm: $PUBLISHED_VERSION"
+
+          # Compare versions
+          if [ "$PUBLISHED_VERSION" = "none" ]; then
+            echo "Package not yet published to npm"
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          elif [ "$CURRENT_VERSION" = "$PUBLISHED_VERSION" ]; then
+            echo "Version $CURRENT_VERSION is already published"
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+          else
+            echo "Version changed from $PUBLISHED_VERSION to $CURRENT_VERSION"
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          fi
+
+  publish:
+    needs: check-version
+    if: needs.check-version.outputs.should-publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: pnpm
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Ensure recent npm for trusted publishing
+        run: npm install -g npm@latest
+
+      - name: Verify npm version
+        run: npm --version
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          name: v${{ needs.check-version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true

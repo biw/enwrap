@@ -216,10 +216,10 @@ export const ew = <
     : [AwaitedRet] extends never
       ? TypedError<NonEmptyString, true> | undefined
       : // if the function we are trying to wrap has an invalid error type,
-        // we mark it as a never type so the end developer knows that they need
-        // to fix the error type
-        // otherwise we return the set of return types we have for the function
-        | NonErrorTypes
+          // we mark it as a never type so the end developer knows that they need
+          // to fix the error type
+          // otherwise we return the set of return types we have for the function
+          | NonErrorTypes
           // if the function is trying to return an key with error
           | (HardcodedErrors extends never | undefined
               ? never

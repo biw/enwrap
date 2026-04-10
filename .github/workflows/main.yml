@@ -18,15 +18,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+          cache: pnpm
 
-      - name: Install with yarn
-        run: corepack enable && yarn
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install with pnpm
+        run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: yarn lint
+        run: pnpm lint
 
       - name: Test
-        run: yarn test
+        run: pnpm test
 
       - name: Build
-        run: yarn build
+        run: pnpm build

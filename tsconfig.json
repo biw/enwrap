@@ -8,11 +8,12 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
+    "ignoreDeprecations": "6.0",
     "esModuleInterop": true,
     "module": "esnext",
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noUncheckedIndexedAccess": true

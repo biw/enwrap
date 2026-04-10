@@ -33,7 +33,7 @@
     "build": "rm -rf dist && tsup src/index.ts --format cjs,esm --dts --minify --treeshake --clean",
     "postpublish": "PACKAGE_VERSION=$(cat package.json | grep \\\"version\\\" | head -1 | awk -F: '{ print $2 }' | sed 's/[\",]//g' | tr -d '[[:space:]]') && git tag v$PACKAGE_VERSION && git push --tags",
     "lint": "tsc && eslint src test",
-    "prepare": "yarn build",
+    "prepare": "pnpm build",
     "size": "size-limit",
     "test": "vitest"
   },
@@ -51,23 +51,22 @@
     }
   ],
   "devDependencies": {
-    "@size-limit/preset-small-lib": "^11.2.0",
+    "@eslint/js": "10.0.1",
+    "@size-limit/preset-small-lib": "^12.0.1",
     "@tsconfig/recommended": "^1.0.8",
-    "@typescript-eslint/eslint-plugin": "8.24.1",
-    "@typescript-eslint/parser": "8.24.1",
-    "eslint": "8.57.1",
-    "eslint-config-prettier": "10.0.1",
-    "eslint-import-resolver-typescript": "3.8.2",
-    "eslint-plugin-import": "2.31.0",
-    "eslint-plugin-prettier": "5.2.3",
-    "eslint-plugin-simple-import-sort": "12.1.1",
-    "eslint-plugin-typescript-sort-keys": "3.3.0",
-    "prettier": "3.5.1",
-    "size-limit": "^11.2.0",
+    "@typescript-eslint/eslint-plugin": "8.58.1",
+    "@typescript-eslint/parser": "8.58.1",
+    "eslint": "10.2.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-perfectionist": "5.8.0",
+    "eslint-plugin-prettier": "5.5.5",
+    "eslint-plugin-simple-import-sort": "13.0.0",
+    "prettier": "3.8.2",
+    "size-limit": "^12.0.1",
     "tsup": "^8.3.6",
-    "typescript": "^5.7.3",
-    "vite": "^6.1.1",
-    "vitest": "^3.0.6"
+    "typescript": "6.0.2",
+    "vite": "^8.0.8",
+    "vitest": "^4.1.4"
   },
-  "packageManager": "yarn@4.5.3"
+  "packageManager": "pnpm@10.33.0"
 }

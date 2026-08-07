@@ -1,9 +1,11 @@
 name: Publish to npm
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  # Call this from the CI workflow after its test jobs succeed. The caller
+  # must grant `contents: write` and `id-token: write` to this workflow job.
+  # Configure npm Trusted Publishing with the caller's CI filename, not this
+  # reusable workflow's filename.
+  workflow_call:
 
 permissions:
   contents: read
@@ -14,27 +16,22 @@ concurrency:
 
 jobs:
   check-version:
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.check.outputs.version }}
-      should-publish: ${{ steps.check.outputs.should_publish }}
+      should_publish: ${{ steps.check.outputs.should_publish }}
 
     steps:
       - name: Checkout the CI-tested revision
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
 
       - name: Verify the tested revision is still main
         id: revision
         env:
-          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          TESTED_SHA: ${{ github.sha }}
         run: |
           if [ "$(git rev-parse HEAD)" != "$TESTED_SHA" ]; then
             echo "Checked out revision does not match the successful CI run" >&2
@@ -83,7 +80,7 @@ jobs:
 
   publish:
     needs: check-version
-    if: needs.check-version.outputs.should-publish == 'true'
+    if: needs.check-version.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -93,7 +90,7 @@ jobs:
       - name: Checkout the CI-tested revision
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -128,7 +125,7 @@ jobs:
 
       - name: Reconfirm the published revision
         env:
-          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          TESTED_SHA: ${{ github.sha }}
         run: |
           git fetch --no-tags origin main
 
@@ -146,7 +143,7 @@ jobs:
       - publish
     if: >-
       needs.check-version.result == 'success' &&
-      needs.check-version.outputs.should-publish == 'true' &&
+      needs.check-version.outputs.should_publish == 'true' &&
       needs.publish.result == 'success'
     runs-on: ubuntu-latest
     permissions:
@@ -158,7 +155,7 @@ jobs:
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           name: v${{ needs.check-version.outputs.version }}
-          target_commitish: ${{ github.event.workflow_run.head_sha }}
+          target_commitish: ${{ github.sha }}
           draft: false
           prerelease: false
           generate_release_notes: true

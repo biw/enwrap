@@ -1,104 +1,164 @@
 name: Publish to npm
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
 
-# Required permissions for npm provenance and GitHub releases
 permissions:
-  contents: write
-  id-token: write
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
 
 jobs:
   check-version:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
-      version-changed: ${{ steps.check.outputs.changed }}
       version: ${{ steps.check.outputs.version }}
       should-publish: ${{ steps.check.outputs.should_publish }}
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout the CI-tested revision
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Verify the tested revision is still main
+        id: revision
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$TESTED_SHA" ]; then
+            echo "Checked out revision does not match the successful CI run" >&2
+            exit 1
+          fi
+
+          git fetch --no-tags origin main
+
+          if [ "$(git rev-parse origin/main)" != "$TESTED_SHA" ]; then
+            echo "is_current=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping stale successful CI revision $TESTED_SHA"
+            exit 0
+          fi
+
+          echo "is_current=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        if: steps.revision.outputs.is_current == 'true'
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: '24'
 
       - name: Check if version should be published
+        if: steps.revision.outputs.is_current == 'true'
         id: check
         run: |
-          # Get current version from package.json
           CURRENT_VERSION=$(node -p "require('./package.json').version")
-          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "Current version in package.json: $CURRENT_VERSION"
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
 
-          # Get published version from npm (if it exists)
-          PUBLISHED_VERSION=$(npm view enwrap version 2>/dev/null || echo "none")
-          echo "Published version on npm: $PUBLISHED_VERSION"
+          echo "version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Current package: $PACKAGE_NAME@$CURRENT_VERSION"
 
-          # Compare versions
-          if [ "$PUBLISHED_VERSION" = "none" ]; then
-            echo "Package not yet published to npm"
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "should_publish=true" >> $GITHUB_OUTPUT
-          elif [ "$CURRENT_VERSION" = "$PUBLISHED_VERSION" ]; then
+          npm view "$PACKAGE_NAME" versions --json > published-versions.json
+
+          if node -e "
+            const versions = require('./published-versions.json')
+            const list = Array.isArray(versions) ? versions : [versions]
+            process.exit(list.includes(process.argv[1]) ? 0 : 1)
+          " "$CURRENT_VERSION"; then
             echo "Version $CURRENT_VERSION is already published"
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "should_publish=false" >> $GITHUB_OUTPUT
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Version changed from $PUBLISHED_VERSION to $CURRENT_VERSION"
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "should_publish=true" >> $GITHUB_OUTPUT
+            echo "Version $CURRENT_VERSION has not been published"
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
           fi
 
   publish:
     needs: check-version
     if: needs.check-version.outputs.should-publish == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout the CI-tested revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
-          cache: pnpm
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm lint
-
-      - name: Test
-        run: pnpm test
-
-      - name: Build
+      - name: Build package
         run: pnpm build
 
-      - name: Ensure recent npm for trusted publishing
-        run: npm install -g npm@latest
+      - name: Verify npm supports trusted publishing
+        run: |
+          NPM_VERSION=$(npm --version)
+          echo "npm version: $NPM_VERSION"
 
-      - name: Verify npm version
-        run: npm --version
+          node -e "
+            const version = process.argv[1].split('.').map(Number)
+            const minimum = [11, 5, 1]
 
-      - name: Publish to npm with provenance
-        run: npm publish --provenance --access public
+            for (let i = 0; i < minimum.length; i++) {
+              if (version[i] > minimum[i]) process.exit(0)
+              if (version[i] < minimum[i]) process.exit(1)
+            }
+          " "$NPM_VERSION"
 
+      - name: Reconfirm the published revision
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git fetch --no-tags origin main
+
+          if [ "$(git rev-parse HEAD)" != "$TESTED_SHA" ] || [ "$(git rev-parse origin/main)" != "$TESTED_SHA" ]; then
+            echo "Refusing to publish a revision that is no longer the tip of main" >&2
+            exit 1
+          fi
+
+      - name: Publish to npm
+        run: npm publish
+
+  release:
+    needs:
+      - check-version
+      - publish
+    if: >-
+      needs.check-version.result == 'success' &&
+      needs.check-version.outputs.should-publish == 'true' &&
+      needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           name: v${{ needs.check-version.outputs.version }}
+          target_commitish: ${{ github.event.workflow_run.head_sha }}
           draft: false
           prerelease: false
           generate_release_notes: true
